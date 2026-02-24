@@ -1148,9 +1148,17 @@ void nca_process_bktr_section(nca_section_ctx_t *ctx) {
     bktr_superblock_t *sb = ctx->bktr_ctx.superblock;
     /* Validate magics. */
     if (sb->relocation_header.magic == MAGIC_BKTR && sb->subsection_header.magic == MAGIC_BKTR) {
-        if (sb->relocation_header.offset + sb->relocation_header.size != sb->subsection_header.offset ||
-            sb->subsection_header.offset + sb->subsection_header.size != ctx->size) {
-            fprintf(stderr, "Invalid BKTR layout!\n");
+        /* Validation:
+         * 1. Relocation must end where subsection begins (no gap)
+         * 2. Subsection must not exceed section size (allow padding at end)
+         */
+        if (sb->relocation_header.offset + sb->relocation_header.size != sb->subsection_header.offset) {
+            fprintf(stderr, "Invalid BKTR layout! Gap between relocation and subsection.\n");
+            exit(EXIT_FAILURE);
+        }
+        
+        if (sb->subsection_header.offset + sb->subsection_header.size > ctx->size) {
+            fprintf(stderr, "Invalid BKTR layout! Subsection exceeds section size.\n");
             exit(EXIT_FAILURE);
         }
         /* Allocate space for an extra (fake) relocation entry, to simplify our logic. */
@@ -1180,7 +1188,15 @@ void nca_process_bktr_section(nca_section_ctx_t *ctx) {
         ctx->bktr_ctx.relocation_block = relocs;
         ctx->bktr_ctx.subsection_block = subs;
 
-        if (ctx->bktr_ctx.subsection_block->total_size != sb->subsection_header.offset) {
+        /* The total_size in subsection_block represents the total physical size described by subsection entries.
+         * Validate that it doesn't exceed section size (allow reasonable values).
+         * Old validation was too strict - it required exact equality which is not necessary.
+         */
+        if (ctx->bktr_ctx.subsection_block->total_size > ctx->size) {
+            fprintf(stderr, "BKTR subsection block total_size validation FAILED!\n");
+            fprintf(stderr, "  subsection total_size(0x%"PRIx64") exceeds section size(0x%"PRIx64")\n",
+                    ctx->bktr_ctx.subsection_block->total_size,
+                    ctx->size);
             free(relocs);
             free(subs);
             ctx->bktr_ctx.relocation_block = NULL;

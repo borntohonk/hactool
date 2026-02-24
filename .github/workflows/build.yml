@@ -42,7 +42,7 @@ jobs:
         mv config.mk.template config.mk
         make -j$(nproc)
 
-    - uses: actions/upload-artifact@v2
+    - uses: actions/upload-artifact@v6
       with:
         name: hactool-${{ matrix.job_name }}
         path: hactool*
