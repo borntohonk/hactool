@@ -15,6 +15,7 @@
 #include "packages.h"
 #include "nso.h"
 #include "save.h"
+#include "switchfs.h"
 
 static const char *prog_name = "hactool";
 
@@ -34,7 +35,7 @@ static void usage(void) {
         "  -y, --verify       Verify hashes and signatures.\n"
         "  -d, --dev          Decrypt with development keys instead of retail.\n"
         "  -k, --keyset       Load keys from an external file.\n"
-        "  -t, --intype=type  Specify input file type [nca, xci, pfs0, romfs, hfs0, npdm, pk11, pk21, ini1, kip1, nax0, save, keygen]\n"
+        "  -t, --intype=type  Specify input file type [nca, xci, pfs0, romfs, hfs0, npdm, pk11, pk21, ini1, kip1, nax0, save, switchfs, keygen]\n"
         "  --titlekey=key     Set title key for Rights ID crypto titles.\n"
         "  --contentkey=key   Set raw key for NCA body decryption.\n"
         "  --disablekeywarns  Disables warning output when loading external keys.\n"
@@ -106,6 +107,8 @@ static void usage(void) {
         "Save data options:\n"
         "  --outdir=dir       Specify save directory path.\n"
         "  --listfiles        List files in save file.\n"
+        "SwitchFS options:\n"
+        "  --outdir=dir       Specify output directory path for organized firmware.\n"
         "Key Derivation options:\n"
         "  --sbk=key          Set console unique Secure Boot Key for key derivation.\n"
         "  --tseckey=key      Set console unique TSEC Key for key derivation.\n"
@@ -248,6 +251,8 @@ int main(int argc, char **argv) {
                     nca_ctx.tool_ctx->file_type = FILETYPE_NSO0;
                 } else if (!strcmp(optarg, "nax0") || !strcmp(optarg, "nax")) {
                     nca_ctx.tool_ctx->file_type = FILETYPE_NAX0;
+                } else if (!strcmp(optarg, "switchfs")) {
+                    nca_ctx.tool_ctx->file_type = FILETYPE_SWITCHFS;
                 } else if (!strcmp(optarg, "keygen") || !strcmp(optarg, "keys") || !strcmp(optarg, "boot0") || !strcmp(optarg, "boot")) {
                     nca_ctx.tool_ctx->file_type = FILETYPE_BOOT0;
                 } else if (!strcmp(optarg, "save")) {
@@ -321,8 +326,8 @@ int main(int argc, char **argv) {
                 nca_ctx.tool_ctx->base_nca_ctx->is_cli_target = false;
                 break;
             case 17:
-                tool_ctx.settings.out_dir_path.enabled = 1;
-                filepath_set(&tool_ctx.settings.out_dir_path.path, optarg);
+                nca_ctx.tool_ctx->settings.out_dir_path.enabled = 1;
+                filepath_set(&nca_ctx.tool_ctx->settings.out_dir_path.path, optarg);
                 break;
             case 18:
                 filepath_set(&nca_ctx.tool_ctx->settings.plaintext_path, optarg);
@@ -480,8 +485,20 @@ int main(int argc, char **argv) {
     if (optind == argc - 1) {
         /* Copy input filename. */
         strncpy(input_name, argv[optind], sizeof(input_name) - 1);
-    } else if (tool_ctx.file_type != FILETYPE_BOOT0 && ((optind < argc) || (argc == 1))) {
+    } else if (tool_ctx.file_type != FILETYPE_BOOT0 && tool_ctx.file_type != FILETYPE_SWITCHFS && ((optind < argc) || (argc == 1))) {
         usage();
+    }
+
+    /* Special case SWITCHFS. */
+    if (tool_ctx.file_type == FILETYPE_SWITCHFS) {
+        switchfs_ctx_t switchfs_ctx;
+        memset(&switchfs_ctx, 0, sizeof(switchfs_ctx));
+        strncpy(switchfs_ctx.input_dir, input_name, sizeof(switchfs_ctx.input_dir) - 1);
+        strncpy(switchfs_ctx.output_dir, nca_ctx.tool_ctx->settings.out_dir_path.path.char_path, sizeof(switchfs_ctx.output_dir) - 1);
+        switchfs_ctx.tool_ctx = &tool_ctx;
+        switchfs_process(&switchfs_ctx);
+        printf("Done!\n");
+        return EXIT_SUCCESS;
     }
 
     /* Special case NAX0. */

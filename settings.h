@@ -140,7 +140,8 @@ enum hactool_file_type
     FILETYPE_NSO0,
     FILETYPE_NAX0,
     FILETYPE_BOOT0,
-    FILETYPE_SAVE
+    FILETYPE_SAVE,
+    FILETYPE_SWITCHFS
 };
 
 #define ACTION_INFO (1<<0)
