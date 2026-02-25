@@ -16,54 +16,72 @@ typedef enum {
 } hactool_basefile_t;
 
 typedef struct {
-    unsigned char secure_boot_key[0x10];                 /* Secure boot key for use in key derivation. NOTE: CONSOLE UNIQUE. */
-    unsigned char tsec_key[0x10];                        /* TSEC key for use in key derivation. NOTE: CONSOLE UNIQUE. */
-    unsigned char device_key[0x10];                      /* Device key used to derive some FS keys. NOTE: CONSOLE UNIQUE. */
-    unsigned char keyblob_keys[0x20][0x10];              /* Actual keys used to decrypt keyblobs. NOTE: CONSOLE UNIQUE.*/
-    unsigned char keyblob_mac_keys[0x20][0x10];          /* Keys used to validate keyblobs. NOTE: CONSOLE UNIQUE. */
-    unsigned char encrypted_keyblobs[0x20][0xB0];        /* Actual encrypted keyblobs (EKS). NOTE: CONSOLE UNIQUE. */
-    unsigned char mariko_aes_class_keys[0xC][0x10];      /* AES Class Keys set by mariko bootrom. */
-    unsigned char mariko_kek[0x10];                      /* Key Encryption Key for mariko. */
-    unsigned char mariko_bek[0x10];                      /* Boot Encryption Key for mariko. */
-    unsigned char keyblobs[0x20][0x90];                  /* Actual decrypted keyblobs (EKS). */
-    unsigned char keyblob_key_sources[0x20][0x10];       /* Seeds for keyblob keys. */
-    unsigned char keyblob_mac_key_source[0x10];          /* Seed for keyblob MAC key derivation. */
-    unsigned char tsec_root_kek[0x10];                   /* Used to generate TSEC root keys. */
-    unsigned char package1_mac_kek[0x10];                /* Used to generate Package1 MAC keys. */
-    unsigned char package1_kek[0x10];                    /* Used to generate Package1 keys. */
-    unsigned char tsec_auth_signatures[0x20][0x10];      /* Auth signatures, seeds for tsec root key/package1 mac kek/package1 key on 6.2.0+. */
-    unsigned char tsec_root_keys[0x20][0x10];            /* Key for master kek decryption, from TSEC firmware on 6.2.0+. */
-    unsigned char master_kek_sources[0x20][0x10];        /* Seeds for firmware master keks. */
-    unsigned char mariko_master_kek_sources[0x20][0x10]; /* Seeds for firmware master keks (Mariko). */
-    unsigned char master_keks[0x20][0x10];               /* Firmware master keks, stored in keyblob prior to 6.2.0. */
-    unsigned char master_key_source[0x10];               /* Seed for master key derivation. */
-    unsigned char master_keys[0x20][0x10];               /* Firmware master keys. */
-    unsigned char package1_mac_keys[0x20][0x10];         /* Package1 MAC keys. */
-    unsigned char package1_keys[0x20][0x10];             /* Package1 keys. */
-    unsigned char package2_keys[0x20][0x10];             /* Package2 keys. */
-    unsigned char package2_key_source[0x10];             /* Seed for Package2 key. */
-    unsigned char per_console_key_source[0x10];          /* Seed for Device key. */
-    unsigned char aes_kek_generation_source[0x10];       /* Seed for GenerateAesKek, usecase + generation 0. */
-    unsigned char aes_key_generation_source[0x10];       /* Seed for GenerateAesKey. */
-    unsigned char key_area_key_application_source[0x10]; /* Seed for kaek 0. */
-    unsigned char key_area_key_ocean_source[0x10];       /* Seed for kaek 1. */
-    unsigned char key_area_key_system_source[0x10];      /* Seed for kaek 2. */
-    unsigned char titlekek_source[0x10];                 /* Seed for titlekeks. */
-    unsigned char header_kek_source[0x10];               /* Seed for header kek. */
-    unsigned char sd_card_kek_source[0x10];              /* Seed for SD card kek. */
-    unsigned char sd_card_key_sources[2][0x20];          /* Seed for SD card encryption keys. */
-    unsigned char save_mac_kek_source[0x10];             /* Seed for save kek. */
-    unsigned char save_mac_key_source[0x10];             /* Seed for save key. */
-    unsigned char header_key_source[0x20];               /* Seed for NCA header key. */
-    unsigned char header_key[0x20];                      /* NCA header key. */
-    unsigned char titlekeks[0x20][0x10];                 /* Title key encryption keys. */
-    unsigned char key_area_keys[0x20][3][0x10];          /* Key area encryption keys. */
-    unsigned char xci_header_key[0x10];                  /* Key for XCI partially encrypted header. */
-    unsigned char save_mac_key[0x10];                    /* Key used to sign savedata. */
+    unsigned char secure_boot_key[0x10];                     /* Secure boot key for use in key derivation. NOTE: CONSOLE UNIQUE. */
+    unsigned char tsec_key[0x10];                            /* TSEC key for use in key derivation. NOTE: CONSOLE UNIQUE. */
+    unsigned char hovi_kek[0x10];                            /* TSEC secret 26, used for deriving HOVI KEKs. Derived from TSEC firmware. */
+    unsigned char device_key[0x10];                          /* Device key used to derive some FS keys. NOTE: CONSOLE UNIQUE. */
+    unsigned char keyblob_keys[0x20][0x10];                  /* Actual keys used to decrypt keyblobs. NOTE: CONSOLE UNIQUE.*/
+    unsigned char keyblob_mac_keys[0x20][0x10];              /* Keys used to validate keyblobs. NOTE: CONSOLE UNIQUE. */
+    unsigned char encrypted_keyblobs[0x20][0xB0];            /* Actual encrypted keyblobs (EKS). NOTE: CONSOLE UNIQUE. */
+    unsigned char mariko_aes_class_keys[0xC][0x10];          /* AES Class Keys set by mariko bootrom. */
+    unsigned char mariko_kek[0x10];                          /* Key Encryption Key for mariko. */
+    unsigned char mariko_bek[0x10];                          /* Boot Encryption Key for mariko. */
+    unsigned char keyblobs[0x20][0x90];                      /* Actual decrypted keyblobs (EKS). */
+    unsigned char keyblob_key_sources[0x20][0x10];           /* Seeds for keyblob keys. */
+    unsigned char keyblob_mac_key_source[0x10];              /* Seed for keyblob MAC key derivation. */
+    /* Production HOVI KEK variants (_00/_01/_02), derived from HOVI_*_KEY_PRD sources. */
+    unsigned char tsec_root_kek[0x10];                       /* Used to generate TSEC root keys. */
+    unsigned char tsec_root_kek_variants[0x3][0x10];         /* KEK variants (_00, _01, _02) for deriving TSEC root keys. */
+    unsigned char package1_mac_kek[0x10];                    /* Used to generate Package1 MAC keys. */
+    unsigned char package1_mac_kek_variants[0x3][0x10];      /* KEK variants (_00, _01, _02) for deriving Package1 MAC keys. */
+    unsigned char package1_kek[0x10];                        /* Used to generate Package1 keys. */
+    unsigned char package1_kek_variants[0x3][0x10];          /* KEK variants (_00, _01, _02) for deriving Package1 keys. */
+    /* Development HOVI KEK variants (_00/_01/_02), derived from HOVI_*_KEY_DEV sources. */
+    unsigned char tsec_root_kek_variants_dev[0x3][0x10];     /* Dev KEK variants (_00, _01, _02) for deriving TSEC root keys. */
+    unsigned char package1_mac_kek_variants_dev[0x3][0x10];  /* Dev KEK variants (_00, _01, _02) for deriving Package1 MAC keys. */
+    unsigned char package1_kek_variants_dev[0x3][0x10];      /* Dev KEK variants (_00, _01, _02) for deriving Package1 keys. */
+    /* Auth signatures (shared between prod and dev paths). */
+    unsigned char tsec_auth_signatures[0x20][0x10];          /* Auth signatures, seeds for tsec root key/package1 mac kek/package1 key on 6.2.0+. */
+    /* Production derived keys. */
+    unsigned char tsec_root_keys[0x20][0x10];                /* Key for master kek decryption, from TSEC firmware on 6.2.0+. */
+    unsigned char package1_keys[0x20][0x10];                 /* Package1 keys. */
+    unsigned char package1_mac_keys[0x20][0x10];             /* Package1 MAC keys. */
+    /* Development derived keys. */
+    unsigned char tsec_root_keys_dev[0x20][0x10];            /* Dev key for master kek decryption, from TSEC firmware on 6.2.0+. */
+    unsigned char package1_keys_dev[0x20][0x10];             /* Dev Package1 keys. */
+    unsigned char package1_mac_keys_dev[0x20][0x10];         /* Dev Package1 MAC keys. */
+    /* Development master keys, derived via tsec_root_keys_dev[2] + master_key_vectors_dev. */
+    unsigned char master_keys_dev[0x20][0x10];               /* Development firmware master keys. */
+    unsigned char master_kek_sources[0x20][0x10];            /* Seeds for firmware master keks. */
+    unsigned char mariko_master_kek_sources[0x20][0x10];     /* Seeds for firmware master keks (Mariko). */
+    unsigned char master_keks[0x20][0x10];                   /* Firmware master keks, stored in keyblob prior to 6.2.0. */
+    unsigned char master_key_source[0x10];                   /* Seed for master key derivation. */
+    unsigned char master_keys[0x20][0x10];                   /* Firmware master keys. */
+    unsigned char package2_keys[0x20][0x10];                 /* Package2 keys. */
+    unsigned char package2_key_source[0x10];                 /* Seed for Package2 key. */
+    unsigned char per_console_key_source[0x10];              /* Seed for Device key. */
+    unsigned char aes_kek_generation_source[0x10];           /* Seed for GenerateAesKek, usecase + generation 0. */
+    unsigned char aes_key_generation_source[0x10];           /* Seed for GenerateAesKey. */
+    unsigned char key_area_key_application_source[0x10];     /* Seed for kaek 0. */
+    unsigned char key_area_key_ocean_source[0x10];           /* Seed for kaek 1. */
+    unsigned char key_area_key_system_source[0x10];          /* Seed for kaek 2. */
+    unsigned char titlekek_source[0x10];                     /* Seed for titlekeks. */
+    unsigned char header_kek_source[0x10];                   /* Seed for header kek. */
+    unsigned char header_kek[0x10];                          /* Header key encryption key. */
+    unsigned char sd_card_kek_source[0x10];                  /* Seed for SD card kek. */
+    unsigned char sd_card_key_sources[2][0x20];              /* Seed for SD card encryption keys. */
+    unsigned char save_mac_kek_source[0x10];                 /* Seed for save kek. */
+    unsigned char save_mac_key_source[0x10];                 /* Seed for save key. */
+    unsigned char header_key_source[0x20];                   /* Seed for NCA header key. */
+    unsigned char header_key[0x20];                          /* NCA header key. */
+    unsigned char titlekeks[0x20][0x10];                     /* Title key encryption keys. */
+    unsigned char key_area_keys[0x20][3][0x10];              /* Key area encryption keys. */
+    unsigned char xci_header_key[0x10];                      /* Key for XCI partially encrypted header. */
+    unsigned char save_mac_key[0x10];                        /* Key used to sign savedata. */
     unsigned char sd_card_keys[2][0x20];
-    unsigned char nca_hdr_fixed_key_moduli[2][0x100];    /* NCA header fixed key RSA pubk. */
-    unsigned char acid_fixed_key_moduli[2][0x100];       /* ACID fixed key RSA pubk. */
-    unsigned char package2_fixed_key_modulus[0x100];     /* Package2 Header RSA pubk. */
+    unsigned char nca_hdr_fixed_key_moduli[2][0x100];        /* NCA header fixed key RSA pubk. */
+    unsigned char acid_fixed_key_moduli[2][0x100];           /* ACID fixed key RSA pubk. */
+    unsigned char package2_fixed_key_modulus[0x100];         /* Package2 Header RSA pubk. */
 } nca_keyset_t;
 
 typedef struct {

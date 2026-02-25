@@ -2,6 +2,7 @@
 #include <string.h>
 #include "aes.h"
 #include "pki.h"
+#include "key_sources.h"
 
 /* Keydata for very early beta NCA0 archives' RSA-OAEP. */
 static const unsigned char beta_nca0_modulus[0x100] = {
@@ -22,7 +23,6 @@ static const unsigned char beta_nca0_modulus[0x100] = {
     0x10, 0x64, 0xE0, 0x2C, 0x69, 0xD1, 0x66, 0x3C, 0x42, 0x2E, 0xEF, 0x19, 0x21, 0x89, 0x8E, 0xE1,
     0xB0, 0xB4, 0xD0, 0x17, 0xA1, 0x0F, 0x73, 0x98, 0x5A, 0xF6, 0xEE, 0xC0, 0x2F, 0x9E, 0xCE, 0xC5
 };
-
 
 static unsigned char beta_nca0_exponent[0x100] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -280,51 +280,403 @@ static void generate_kek(unsigned char *dst, const unsigned char *src, const uns
     }
 }
 
-void pki_derive_keys(nca_keyset_t *keyset) {
-    unsigned char zeroes[0x100];
-    unsigned char cmac[0x10];
-    memset(zeroes, 0, 0x100);
-    memset(cmac, 0, 0x10);
-    /* Derive keys as necessary. */
+static void embed_sources(nca_keyset_t *keyset) {
+    static const unsigned char zeroes[0x20] = {0};
+
+    extern const unsigned char hovi_kek[0x10];
+    if (memcmp(keyset->hovi_kek, zeroes, 0x10) == 0) {
+        memcpy(keyset->hovi_kek, hovi_kek, 0x10);
+    }
+
+    if (memcmp(keyset->tsec_auth_signatures[0], zeroes, 0x10) == 0) {
+        memcpy(keyset->tsec_auth_signatures[0], tsec_auth_signatures[0], 0x10);
+        memcpy(keyset->tsec_auth_signatures[1], tsec_auth_signatures[1], 0x10);
+        memcpy(keyset->tsec_auth_signatures[2], tsec_auth_signatures[2], 0x10);
+    }
+
+    if (memcmp(keyset->master_kek_sources[0x08], zeroes, 0x10) == 0) {
+        for (int i = 0; i < 13; i++) {
+            memcpy(keyset->master_kek_sources[0x08 + i], erista_master_kek_sources[i], 0x10);
+        }
+    }
+
+    if (memcmp(keyset->mariko_master_kek_sources[0], zeroes, 0x10) == 0) {
+        for (int i = 0; i < 21; i++) {
+            memcpy(keyset->mariko_master_kek_sources[i], mariko_master_kek_sources[i], 0x10);
+        }
+    }
+
+    extern const unsigned char mariko_kek[0x10];
+    extern const unsigned char mariko_bek[0x10];
+    if (memcmp(keyset->mariko_kek, zeroes, 0x10) == 0) {
+        memcpy(keyset->mariko_kek, mariko_kek, 0x10);
+    }
+    if (memcmp(keyset->mariko_bek, zeroes, 0x10) == 0) {
+        memcpy(keyset->mariko_bek, mariko_bek, 0x10);
+    }
+
+    if (memcmp(keyset->keyblob_mac_key_source, zeroes, 0x10) == 0) {
+        memcpy(keyset->keyblob_mac_key_source, embedded_keyblob_mac_key_source, 0x10);
+    }
+    if (memcmp(keyset->master_key_source, zeroes, 0x10) == 0) {
+        memcpy(keyset->master_key_source, embedded_master_key_source, 0x10);
+    }
+    if (memcmp(keyset->package2_key_source, zeroes, 0x10) == 0) {
+        memcpy(keyset->package2_key_source, embedded_package2_key_source, 0x10);
+    }
+    if (memcmp(keyset->per_console_key_source, zeroes, 0x10) == 0) {
+        memcpy(keyset->per_console_key_source, embedded_per_console_key_source, 0x10);
+    }
+    if (memcmp(keyset->aes_kek_generation_source, zeroes, 0x10) == 0) {
+        memcpy(keyset->aes_kek_generation_source, embedded_aes_kek_generation_source, 0x10);
+    }
+    if (memcmp(keyset->aes_key_generation_source, zeroes, 0x10) == 0) {
+        memcpy(keyset->aes_key_generation_source, embedded_aes_key_generation_source, 0x10);
+    }
+    if (memcmp(keyset->titlekek_source, zeroes, 0x10) == 0) {
+        memcpy(keyset->titlekek_source, embedded_titlekek_source, 0x10);
+    }
+    if (memcmp(keyset->key_area_key_application_source, zeroes, 0x10) == 0) {
+        memcpy(keyset->key_area_key_application_source, embedded_key_area_key_application_source, 0x10);
+    }
+    if (memcmp(keyset->key_area_key_ocean_source, zeroes, 0x10) == 0) {
+        memcpy(keyset->key_area_key_ocean_source, embedded_key_area_key_ocean_source, 0x10);
+    }
+    if (memcmp(keyset->key_area_key_system_source, zeroes, 0x10) == 0) {
+        memcpy(keyset->key_area_key_system_source, embedded_key_area_key_system_source, 0x10);
+    }
+    if (memcmp(keyset->sd_card_kek_source, zeroes, 0x10) == 0) {
+        memcpy(keyset->sd_card_kek_source, embedded_sd_card_kek_source, 0x10);
+    }
+    if (memcmp(keyset->save_mac_kek_source, zeroes, 0x10) == 0) {
+        memcpy(keyset->save_mac_kek_source, embedded_save_mac_kek_source, 0x10);
+    }
+    if (memcmp(keyset->header_kek_source, zeroes, 0x10) == 0) {
+        memcpy(keyset->header_kek_source, embedded_header_kek_source, 0x10);
+    }
+    if (memcmp(keyset->header_key_source, zeroes, 0x20) == 0) {
+        memcpy(keyset->header_key_source, embedded_header_key_source, 0x20);
+    }
+
+    if (memcmp(keyset->keyblob_key_sources[0], zeroes, 0x10) == 0) {
+        memcpy(keyset->keyblob_key_sources[0], embedded_keyblob_key_source_00, 0x10);
+        memcpy(keyset->keyblob_key_sources[1], embedded_keyblob_key_source_01, 0x10);
+        memcpy(keyset->keyblob_key_sources[2], embedded_keyblob_key_source_02, 0x10);
+        memcpy(keyset->keyblob_key_sources[3], embedded_keyblob_key_source_03, 0x10);
+        memcpy(keyset->keyblob_key_sources[4], embedded_keyblob_key_source_04, 0x10);
+        memcpy(keyset->keyblob_key_sources[5], embedded_keyblob_key_source_05, 0x10);
+    }
+}
+
+static void derive_tsec_keys_prod(nca_keyset_t *keyset) {
+
+    aes_ctx_t *ctx = new_aes_ctx(keyset->hovi_kek, 0x10, AES_MODE_ECB);
+
+    aes_encrypt(ctx, keyset->tsec_root_kek_variants[0], hovi_key_sources[2], 0x10);
+    memcpy(keyset->tsec_root_kek_variants[1], keyset->tsec_root_kek_variants[0], 0x10);
+    aes_decrypt(ctx, keyset->tsec_root_kek_variants[2], hovi_key_sources[2], 0x10);
+
+    aes_encrypt(ctx, keyset->package1_kek_variants[0], hovi_key_sources[1], 0x10);
+    memcpy(keyset->package1_kek_variants[1], keyset->package1_kek_variants[0], 0x10);
+    aes_decrypt(ctx, keyset->package1_kek_variants[2], hovi_key_sources[1], 0x10);
+
+    aes_encrypt(ctx, keyset->package1_mac_kek_variants[0], hovi_key_sources[0], 0x10);
+    memcpy(keyset->package1_mac_kek_variants[1], keyset->package1_mac_kek_variants[0], 0x10);
+    aes_decrypt(ctx, keyset->package1_mac_kek_variants[2], hovi_key_sources[0], 0x10);
+
+    free_aes_ctx(ctx);
+
+    for (unsigned int i = 0; i < 3; i++) {
+        aes_ctx_t *root_ctx = new_aes_ctx(keyset->tsec_root_kek_variants[i], 0x10, AES_MODE_ECB);
+        aes_encrypt(root_ctx, keyset->tsec_root_keys[i], keyset->tsec_auth_signatures[i], 0x10);
+        free_aes_ctx(root_ctx);
+
+        aes_ctx_t *pk1_ctx = new_aes_ctx(keyset->package1_kek_variants[i], 0x10, AES_MODE_ECB);
+        aes_encrypt(pk1_ctx, keyset->package1_keys[6 + i], keyset->tsec_auth_signatures[i], 0x10);
+        free_aes_ctx(pk1_ctx);
+
+        aes_ctx_t *mac_ctx = new_aes_ctx(keyset->package1_mac_kek_variants[i], 0x10, AES_MODE_ECB);
+        aes_encrypt(mac_ctx, keyset->package1_mac_keys[6 + i], keyset->tsec_auth_signatures[i], 0x10);
+        free_aes_ctx(mac_ctx);
+    }
+
+    memcpy(keyset->tsec_root_kek,     keyset->tsec_root_kek_variants[2],     0x10);
+    memcpy(keyset->package1_kek,      keyset->package1_kek_variants[2],      0x10);
+    memcpy(keyset->package1_mac_kek,  keyset->package1_mac_kek_variants[2],  0x10);
+}
+
+static void derive_tsec_keys_dev(nca_keyset_t *keyset) {
+
+    aes_ctx_t *ctx = new_aes_ctx(keyset->hovi_kek, 0x10, AES_MODE_ECB);
+
+    aes_encrypt(ctx, keyset->tsec_root_kek_variants_dev[0], hovi_key_sources_dev[2], 0x10);
+    memcpy(keyset->tsec_root_kek_variants_dev[1], keyset->tsec_root_kek_variants_dev[0], 0x10);
+    aes_decrypt(ctx, keyset->tsec_root_kek_variants_dev[2], hovi_key_sources_dev[2], 0x10);
+
+    aes_encrypt(ctx, keyset->package1_kek_variants_dev[0], hovi_key_sources_dev[1], 0x10);
+    memcpy(keyset->package1_kek_variants_dev[1], keyset->package1_kek_variants_dev[0], 0x10);
+    aes_decrypt(ctx, keyset->package1_kek_variants_dev[2], hovi_key_sources_dev[1], 0x10);
+
+    aes_encrypt(ctx, keyset->package1_mac_kek_variants_dev[0], hovi_key_sources_dev[0], 0x10);
+    memcpy(keyset->package1_mac_kek_variants_dev[1], keyset->package1_mac_kek_variants_dev[0], 0x10);
+    aes_decrypt(ctx, keyset->package1_mac_kek_variants_dev[2], hovi_key_sources_dev[0], 0x10);
+
+    free_aes_ctx(ctx);
+
+    for (unsigned int i = 0; i < 3; i++) {
+        aes_ctx_t *root_ctx = new_aes_ctx(keyset->tsec_root_kek_variants_dev[i], 0x10, AES_MODE_ECB);
+        aes_encrypt(root_ctx, keyset->tsec_root_keys_dev[i], keyset->tsec_auth_signatures[i], 0x10);
+        free_aes_ctx(root_ctx);
+
+        aes_ctx_t *pk1_ctx = new_aes_ctx(keyset->package1_kek_variants_dev[i], 0x10, AES_MODE_ECB);
+        aes_encrypt(pk1_ctx, keyset->package1_keys_dev[6 + i], keyset->tsec_auth_signatures[i], 0x10);
+        free_aes_ctx(pk1_ctx);
+
+        aes_ctx_t *mac_ctx = new_aes_ctx(keyset->package1_mac_kek_variants_dev[i], 0x10, AES_MODE_ECB);
+        aes_encrypt(mac_ctx, keyset->package1_mac_keys_dev[6 + i], keyset->tsec_auth_signatures[i], 0x10);
+        free_aes_ctx(mac_ctx);
+    }
+}
+
+static int derive_master_keys_prod(nca_keyset_t *keyset, unsigned char outkeys[][0x10]) {
+    if (!keyset || !outkeys) return -1;
+
+    unsigned char master_kek_08[0x10];
+    aes_ctx_t *ctx = new_aes_ctx(keyset->tsec_root_keys[2], 0x10, AES_MODE_ECB);
+    aes_decrypt(ctx, master_kek_08, keyset->master_kek_sources[0x08], 0x10);
+    free_aes_ctx(ctx);
+
+    unsigned char master_key_08[0x10];
+    ctx = new_aes_ctx(master_kek_08, 0x10, AES_MODE_ECB);
+    aes_decrypt(ctx, master_key_08, keyset->master_key_source, 0x10);
+    free_aes_ctx(ctx);
+
+    unsigned char temp[9][0x10];
+    int count = 0;
+    unsigned char current[0x10];
+    memcpy(current, master_key_08, 0x10);
+
+    for (int i = 7; i >= 0; i--) {
+        unsigned char next[0x10];
+        ctx = new_aes_ctx(current, 0x10, AES_MODE_ECB);
+        aes_decrypt(ctx, next, master_key_vectors[i], 0x10);
+        free_aes_ctx(ctx);
+
+        if (i == 7) {
+            memcpy(temp[count++], current, 0x10);
+            memcpy(temp[count++], next, 0x10);
+        } else {
+            memcpy(temp[count++], next, 0x10);
+        }
+        memcpy(current, next, 0x10);
+    }
+
+    for (int i = 0; i < count; i++) {
+        memcpy(outkeys[i], temp[count - 1 - i], 0x10);
+    }
+
+    return count;
+}
+
+static int derive_master_keys_dev(nca_keyset_t *keyset, unsigned char outkeys[][0x10]) {
+    if (!keyset || !outkeys) return -1;
+
+    unsigned char master_kek_08_dev[0x10];
+    aes_ctx_t *ctx = new_aes_ctx(keyset->tsec_root_keys_dev[2], 0x10, AES_MODE_ECB);
+    aes_decrypt(ctx, master_kek_08_dev, keyset->master_kek_sources[0x08], 0x10);
+    free_aes_ctx(ctx);
+
+    unsigned char master_key_08_dev[0x10];
+    ctx = new_aes_ctx(master_kek_08_dev, 0x10, AES_MODE_ECB);
+    aes_decrypt(ctx, master_key_08_dev, keyset->master_key_source, 0x10);
+    free_aes_ctx(ctx);
+
+    unsigned char temp[9][0x10];
+    int count = 0;
+    unsigned char current[0x10];
+    memcpy(current, master_key_08_dev, 0x10);
+
+    for (int i = 7; i >= 0; i--) {
+        unsigned char next[0x10];
+        ctx = new_aes_ctx(current, 0x10, AES_MODE_ECB);
+        aes_decrypt(ctx, next, master_key_vectors_dev[i], 0x10);
+        free_aes_ctx(ctx);
+
+        if (i == 7) {
+            memcpy(temp[count++], current, 0x10);
+            memcpy(temp[count++], next, 0x10);
+        } else {
+            memcpy(temp[count++], next, 0x10);
+        }
+        memcpy(current, next, 0x10);
+    }
+
+    for (int i = 0; i < count; i++) {
+        memcpy(outkeys[i], temp[count - 1 - i], 0x10);
+    }
+
+    return count;
+}
+
+static void derive_complete_master_keys_prod(nca_keyset_t *keyset) {
+    static const unsigned char zeroes[0x10] = {0};
+
+    unsigned char old_keys[9][0x10];
+    int old_count = derive_master_keys_prod(keyset, old_keys);
+    if (old_count < 0) return;
+
+    for (int i = 0; i < old_count; i++) {
+        memcpy(&keyset->master_keys[i], old_keys[i], 0x10);
+    }
+
+    int total = old_count;
+    for (int i = 0x09; i <= 0x14; i++) {
+        if (memcmp(keyset->master_kek_sources[i], zeroes, 0x10) == 0) continue;
+
+        unsigned char master_kek[0x10];
+        aes_ctx_t *ctx = new_aes_ctx(keyset->tsec_root_keys[2], 0x10, AES_MODE_ECB);
+        aes_decrypt(ctx, master_kek, keyset->master_kek_sources[i], 0x10);
+        free_aes_ctx(ctx);
+
+        ctx = new_aes_ctx(master_kek, 0x10, AES_MODE_ECB);
+        aes_decrypt(ctx, &keyset->master_keys[total++], keyset->master_key_source, 0x10);
+        free_aes_ctx(ctx);
+    }
+}
+
+static void derive_complete_master_keys_dev(nca_keyset_t *keyset) {
+    static const unsigned char zeroes[0x10] = {0};
+
+    unsigned char old_keys[9][0x10];
+    int old_count = derive_master_keys_dev(keyset, old_keys);
+    if (old_count < 0) return;
+
+    for (int i = 0; i < old_count; i++) {
+        memcpy(&keyset->master_keys_dev[i], old_keys[i], 0x10);
+    }
+
+    int total = old_count;
+    for (int i = 0x09; i <= 0x14; i++) {
+        if (memcmp(keyset->master_kek_sources[i], zeroes, 0x10) == 0) continue;
+
+        unsigned char master_kek[0x10];
+        aes_ctx_t *ctx = new_aes_ctx(keyset->tsec_root_keys_dev[2], 0x10, AES_MODE_ECB);
+        aes_decrypt(ctx, master_kek, keyset->master_kek_sources[i], 0x10);
+        free_aes_ctx(ctx);
+
+        ctx = new_aes_ctx(master_kek, 0x10, AES_MODE_ECB);
+        aes_decrypt(ctx, &keyset->master_keys_dev[total++], keyset->master_key_source, 0x10);
+        free_aes_ctx(ctx);
+    }
+}
+
+static void derive_per_master_key_material(nca_keyset_t *keyset, int is_dev) {
+    static const unsigned char zeroes[0x20] = {0};
+
+    for (unsigned int i = 0; i < 0x20; i++) {
+        unsigned char *mk = is_dev ? keyset->master_keys_dev[i] : keyset->master_keys[i];
+        if (memcmp(mk, zeroes, 0x10) == 0) continue;
+
+        aes_ctx_t *master_ctx = new_aes_ctx(mk, 0x10, AES_MODE_ECB);
+
+        if (memcmp(keyset->key_area_key_application_source, zeroes, 0x10) != 0) {
+            generate_kek(keyset->key_area_keys[i][0], keyset->key_area_key_application_source,
+                         mk, keyset->aes_kek_generation_source, keyset->aes_key_generation_source);
+        }
+        if (memcmp(keyset->key_area_key_ocean_source, zeroes, 0x10) != 0) {
+            generate_kek(keyset->key_area_keys[i][1], keyset->key_area_key_ocean_source,
+                         mk, keyset->aes_kek_generation_source, keyset->aes_key_generation_source);
+        }
+        if (memcmp(keyset->key_area_key_system_source, zeroes, 0x10) != 0) {
+            generate_kek(keyset->key_area_keys[i][2], keyset->key_area_key_system_source,
+                         mk, keyset->aes_kek_generation_source, keyset->aes_key_generation_source);
+        }
+        if (memcmp(keyset->titlekek_source, zeroes, 0x10) != 0) {
+            aes_decrypt(master_ctx, &keyset->titlekeks[i], keyset->titlekek_source, 0x10);
+        }
+        if (memcmp(keyset->package2_key_source, zeroes, 0x10) != 0) {
+            aes_decrypt(master_ctx, &keyset->package2_keys[i], keyset->package2_key_source, 0x10);
+        }
+
+        if (i == 0) {
+            if (memcmp(keyset->header_kek_source, zeroes, 0x10) != 0 &&
+                memcmp(keyset->header_key_source, zeroes, 0x20) != 0) {
+                generate_kek(keyset->header_kek, keyset->header_kek_source,
+                             mk, keyset->aes_kek_generation_source, keyset->aes_key_generation_source);
+                aes_ctx_t *header_ctx = new_aes_ctx(keyset->header_kek, 0x10, AES_MODE_ECB);
+                aes_decrypt(header_ctx, keyset->header_key, keyset->header_key_source, 0x20);
+                free_aes_ctx(header_ctx);
+            }
+            if (memcmp(keyset->sd_card_kek_source, zeroes, 0x10) != 0) {
+                unsigned char sd_kek[0x10];
+                generate_kek(sd_kek, keyset->sd_card_kek_source,
+                             mk, keyset->aes_kek_generation_source, keyset->aes_key_generation_source);
+                aes_ctx_t *sd_ctx = new_aes_ctx(sd_kek, 0x10, AES_MODE_ECB);
+                for (unsigned int k = 0; k < 2; k++) {
+                    if (memcmp(keyset->sd_card_key_sources[k], zeroes, 0x20) != 0) {
+                        aes_decrypt(sd_ctx, keyset->sd_card_keys[k], keyset->sd_card_key_sources[k], 0x20);
+                    }
+                }
+                free_aes_ctx(sd_ctx);
+            }
+            if (memcmp(keyset->save_mac_kek_source, zeroes, 0x10) != 0 &&
+                memcmp(keyset->save_mac_key_source, zeroes, 0x10) != 0 &&
+                memcmp(keyset->device_key, zeroes, 0x10) != 0) {
+                generate_kek(keyset->save_mac_key, keyset->save_mac_kek_source,
+                             keyset->device_key, keyset->aes_kek_generation_source, keyset->save_mac_key_source);
+            }
+        }
+
+        free_aes_ctx(master_ctx);
+    }
+}
+
+void pki_derive_keys(nca_keyset_t *keyset, int is_dev) {
+    embed_sources(keyset);
+    derive_tsec_keys_prod(keyset);
+    derive_tsec_keys_dev(keyset);
+
+    static const unsigned char zeroes[0x10] = {0};
+    for (unsigned int i = 0; i < 0x20; i++) {
+        if (memcmp(keyset->mariko_kek, zeroes, 0x10) == 0) continue;
+        if (memcmp(keyset->mariko_master_kek_sources[i], zeroes, 0x10) == 0) continue;
+        if (memcmp(keyset->master_keks[i], zeroes, 0x10) != 0) continue;
+        aes_ctx_t *mariko_ctx = new_aes_ctx(keyset->mariko_kek, 0x10, AES_MODE_ECB);
+        aes_decrypt(mariko_ctx, keyset->master_keks[i], keyset->mariko_master_kek_sources[i], 0x10);
+        free_aes_ctx(mariko_ctx);
+    }
+
+    derive_complete_master_keys_prod(keyset);
+    derive_complete_master_keys_dev(keyset);
+    derive_per_master_key_material(keyset, is_dev);
+
+    unsigned char cmac[0x10] = {0};
     for (unsigned int i = 0; i < 0x6; i++) {
-        /* Start by deriving keyblob keys. */
-        if (memcmp(&keyset->secure_boot_key, zeroes, 0x10) == 0) {
-            continue;
-        }
-        if (memcmp(&keyset->tsec_key, zeroes, 0x10) == 0) {
-            continue;
-        }
-        if (memcmp(&keyset->keyblob_key_sources[i], zeroes, 0x10) == 0) {
-            continue;
-        }
-        aes_ctx_t *sbk_ctx = new_aes_ctx(keyset->secure_boot_key, 0x10, AES_MODE_ECB);
+        if (memcmp(&keyset->secure_boot_key, zeroes, 0x10) == 0) continue;
+        if (memcmp(&keyset->tsec_key, zeroes, 0x10) == 0) continue;
+        if (memcmp(&keyset->keyblob_key_sources[i], zeroes, 0x10) == 0) continue;
+
         aes_ctx_t *tsec_ctx = new_aes_ctx(keyset->tsec_key, 0x10, AES_MODE_ECB);
+        aes_ctx_t *sbk_ctx  = new_aes_ctx(keyset->secure_boot_key, 0x10, AES_MODE_ECB);
         aes_decrypt(tsec_ctx, &keyset->keyblob_keys[i], &keyset->keyblob_key_sources[i], 0x10);
-        aes_decrypt(sbk_ctx, &keyset->keyblob_keys[i], &keyset->keyblob_keys[i], 0x10);
+        aes_decrypt(sbk_ctx,  &keyset->keyblob_keys[i], &keyset->keyblob_keys[i], 0x10);
         free_aes_ctx(tsec_ctx);
         free_aes_ctx(sbk_ctx);
-        if (memcmp(keyset->keyblob_mac_key_source, zeroes, 0x10) == 0) {
-            continue;
-        }
-        aes_ctx_t *mac_gen_ctx = new_aes_ctx(&keyset->keyblob_keys[i], 0x10, AES_MODE_ECB);
-        aes_decrypt(mac_gen_ctx, &keyset->keyblob_mac_keys[i], keyset->keyblob_mac_key_source, 0x10);
-        /* Derive Device key */
+
+        if (memcmp(keyset->keyblob_mac_key_source, zeroes, 0x10) == 0) continue;
+
+        aes_ctx_t *mac_ctx = new_aes_ctx(&keyset->keyblob_keys[i], 0x10, AES_MODE_ECB);
+        aes_decrypt(mac_ctx, &keyset->keyblob_mac_keys[i], keyset->keyblob_mac_key_source, 0x10);
         if (i == 0 && memcmp(keyset->per_console_key_source, zeroes, 0x10) != 0) {
-            aes_decrypt(mac_gen_ctx, keyset->device_key, keyset->per_console_key_source, 0x10);
+            aes_decrypt(mac_ctx, keyset->device_key, keyset->per_console_key_source, 0x10);
         }
-        free_aes_ctx(mac_gen_ctx);
+        free_aes_ctx(mac_ctx);
     }
     for (unsigned int i = 0; i < 0x6; i++) {
-        /* Then we decrypt keyblobs. */
-        if (memcmp(&keyset->keyblob_keys[i], zeroes, 0x10) == 0) {
-            continue;
-        }
-        if (memcmp(&keyset->keyblob_mac_keys[i], zeroes, 0x10) == 0) {
-            continue;
-        }
-        if (memcmp(&keyset->encrypted_keyblobs[i], zeroes, 0xB0) == 0) {
-            continue;
-        }
+        if (memcmp(&keyset->keyblob_keys[i], zeroes, 0x10) == 0) continue;
+        if (memcmp(&keyset->keyblob_mac_keys[i], zeroes, 0x10) == 0) continue;
+        if (memcmp(&keyset->encrypted_keyblobs[i], zeroes, 0xB0) == 0) continue;
+
         aes_calculate_cmac(cmac, &keyset->encrypted_keyblobs[i][0x10], 0xA0, keyset->keyblob_mac_keys[i]);
         if (memcmp(cmac, &keyset->encrypted_keyblobs[i][0], 0x10) != 0) {
             fprintf(stderr, "[ WARN ] Keyblob MAC %02x is invalid. Are SBK/TSEC key correct?\n", i);
@@ -334,266 +686,146 @@ void pki_derive_keys(nca_keyset_t *keyset) {
         aes_setiv(keyblob_ctx, &keyset->encrypted_keyblobs[i][0x10], 0x10);
         aes_decrypt(keyblob_ctx, &keyset->keyblobs[i], &keyset->encrypted_keyblobs[i][0x20], sizeof(keyset->keyblobs[i]));
         free_aes_ctx(keyblob_ctx);
-	}
+    }
     for (unsigned int i = 0; i < 0x6; i++) {
-        /* Set package1 key as relevant. */
         if (memcmp(keyset->keyblobs[i] + 0x80, zeroes, 0x10) != 0) {
             memcpy(&keyset->package1_keys[i], &keyset->keyblobs[i][0x80], 0x10);
         }
-        /* Set master kek as relevant. */
         if (memcmp(keyset->keyblobs[i] + 0x00, zeroes, 0x10) != 0) {
             memcpy(&keyset->master_keks[i], &keyset->keyblobs[i][0x00], 0x10);
         }
     }
-    for (unsigned int i = 0x6; i < 0x20; i++) {
-        /* Derive new 6.2.0+ keks. */
-        if (memcmp(keyset->tsec_auth_signatures[i-6], zeroes, 0x10) == 0) {
-            continue;
-        }
-
-        /* Derive TSEC root key. */
-        if (memcmp(keyset->tsec_root_kek, zeroes, 0x10) != 0) {
-            aes_ctx_t *tsec_root_ctx = new_aes_ctx(keyset->tsec_root_kek, 0x10, AES_MODE_ECB);
-            aes_encrypt(tsec_root_ctx, keyset->tsec_root_keys[i-6], keyset->tsec_auth_signatures[i-6], 0x10);
-            free_aes_ctx(tsec_root_ctx);
-        }
-
-        /* Derive package1 MAC key */
-        if (memcmp(keyset->package1_mac_kek, zeroes, 0x10) != 0) {
-            aes_ctx_t *pk11_mac_ctx = new_aes_ctx(keyset->package1_mac_kek, 0x10, AES_MODE_ECB);
-            aes_encrypt(pk11_mac_ctx, keyset->package1_mac_keys[i], keyset->tsec_auth_signatures[i-6], 0x10);
-            free_aes_ctx(pk11_mac_ctx);
-        }
-
-        /* Derive package1 key */
-        if (memcmp(keyset->package1_kek, zeroes, 0x10) != 0) {
-            aes_ctx_t *pk11_ctx = new_aes_ctx(keyset->package1_kek, 0x10, AES_MODE_ECB);
-            aes_encrypt(pk11_ctx, keyset->package1_keys[i], keyset->tsec_auth_signatures[i-6], 0x10);
-            free_aes_ctx(pk11_ctx);
-        }
-    }
-    for (unsigned int i = 0x6; i < 0x20; i++) {
-        /* Do new keygen for 6.2.0+. */
-        const unsigned int which_tsec_root_key = (i >= 0x8) ? (0x8 - 6) : (i - 6);
-        if (memcmp(keyset->tsec_root_keys[which_tsec_root_key], zeroes, 0x10) == 0) {
-            continue;
-        }
-        if (memcmp(keyset->master_kek_sources[i], zeroes, 0x10) == 0) {
-            continue;
-        }
-
-        aes_ctx_t *tsec_root_ctx = new_aes_ctx(keyset->tsec_root_keys[which_tsec_root_key], 0x10, AES_MODE_ECB);
-        aes_decrypt(tsec_root_ctx, keyset->master_keks[i], keyset->master_kek_sources[i], 0x10);
-        free_aes_ctx(tsec_root_ctx);
-    }
-    /* Derive master keks with mariko keydata -- these are always preferred to other sources. */
-    for (unsigned int i = 0; i < 0x20; i++) {
-        if (memcmp(keyset->mariko_kek, zeroes, 0x10) == 0) {
-            continue;
-        }
-        if (memcmp(keyset->mariko_master_kek_sources[i], zeroes, 0x10) == 0) {
-            continue;
-        }
-        aes_ctx_t *mariko_kek_ctx = new_aes_ctx(keyset->mariko_kek, 0x10, AES_MODE_ECB);
-        aes_decrypt(mariko_kek_ctx, keyset->master_keks[i], keyset->mariko_master_kek_sources[i], 0x10);
-        free_aes_ctx(mariko_kek_ctx);
-    }
-    for (unsigned int i = 0; i < 0x20; i++) {
-        /* Then we derive master keys. */
-        if (memcmp(keyset->master_key_source, zeroes, 0x10) == 0) {
-            continue;
-        }
-        /* We need a non-zero master kek. */
-        if (memcmp(keyset->master_keks[i], zeroes, 0x10) == 0) {
-            continue;
-        }
-
-        /* Derive Master Keys. */
-        aes_ctx_t *master_gen_ctx = new_aes_ctx(&keyset->master_keks[i], 0x10, AES_MODE_ECB);
-        aes_decrypt(master_gen_ctx, &keyset->master_keys[i], keyset->master_key_source, 0x10);
-        free_aes_ctx(master_gen_ctx);
-    }
-    for (unsigned int i = 0; i < 0x20; i++) {
-        if (memcmp(&keyset->master_keys[i], zeroes, 0x10) == 0) {
-            continue;
-        }
-
-        aes_ctx_t *master_ctx = new_aes_ctx(&keyset->master_keys[i], 0x10, AES_MODE_ECB);
-
-        /* Derive Key Area Encryption Keys */
-        if (memcmp(keyset->key_area_key_application_source, zeroes, 0x10) != 0) {
-            generate_kek(keyset->key_area_keys[i][0], keyset->key_area_key_application_source, keyset->master_keys[i], keyset->aes_kek_generation_source, keyset->aes_key_generation_source);
-        }
-        if (memcmp(keyset->key_area_key_ocean_source, zeroes, 0x10) != 0) {
-            generate_kek(keyset->key_area_keys[i][1], keyset->key_area_key_ocean_source, keyset->master_keys[i], keyset->aes_kek_generation_source, keyset->aes_key_generation_source);
-        }
-        if (memcmp(keyset->key_area_key_system_source, zeroes, 0x10) != 0) {
-            generate_kek(keyset->key_area_keys[i][2], keyset->key_area_key_system_source, keyset->master_keys[i], keyset->aes_kek_generation_source, keyset->aes_key_generation_source);
-        }
-
-        /* Derive Titlekek */
-        if (memcmp(keyset->titlekek_source, zeroes, 0x10) != 0) {
-            aes_decrypt(master_ctx, &keyset->titlekeks[i], keyset->titlekek_source, 0x10);
-        }
-
-        /* Derive Package2 Key */
-        if (memcmp(keyset->package2_key_source, zeroes, 0x10) != 0) {
-            aes_decrypt(master_ctx, &keyset->package2_keys[i], keyset->package2_key_source, 0x10);
-        }
-
-        /* Derive Header Key */
-        if (i == 0 && memcmp(keyset->header_kek_source, zeroes, 0x10) != 0 && memcmp(keyset->header_key_source, zeroes, 0x20) != 0) {
-            unsigned char header_kek[0x10];
-            generate_kek(header_kek, keyset->header_kek_source, keyset->master_keys[i], keyset->aes_kek_generation_source, keyset->aes_key_generation_source);
-            aes_ctx_t *header_ctx = new_aes_ctx(header_kek, 0x10, AES_MODE_ECB);
-            aes_decrypt(header_ctx, keyset->header_key, keyset->header_key_source, 0x20);
-            free_aes_ctx(header_ctx);
-        }
-
-        /* Derive SD Card Key */
-        if (i == 0 && memcmp(keyset->sd_card_kek_source, zeroes, 0x10) != 0) {
-            unsigned char sd_kek[0x10];
-            generate_kek(sd_kek, keyset->sd_card_kek_source, keyset->master_keys[i], keyset->aes_kek_generation_source, keyset->aes_key_generation_source);
-            aes_ctx_t *sd_ctx = new_aes_ctx(sd_kek, 0x10, AES_MODE_ECB);
-
-            for (unsigned int k = 0; k < 2; k++) {
-                if (memcmp(keyset->sd_card_key_sources[k], zeroes, 0x20) != 0) {
-                    aes_decrypt(sd_ctx, keyset->sd_card_keys[k], keyset->sd_card_key_sources[k], 0x20);
-                }
-            }
-
-            free_aes_ctx(sd_ctx);
-        }
-
-        /* Derive Save MAC Key */
-        if (i == 0 && memcmp(keyset->save_mac_kek_source, zeroes, 0x10) != 0 && memcmp(keyset->save_mac_key_source, zeroes, 0x10) != 0 && memcmp(keyset->device_key, zeroes, 0x10) != 0) {
-            generate_kek(keyset->save_mac_key, keyset->save_mac_kek_source, keyset->device_key, keyset->aes_kek_generation_source, keyset->save_mac_key_source);
-        }
-
-        free_aes_ctx(master_ctx);
-    }
-
 }
 
-void pki_print_keys(nca_keyset_t *keyset) {
-    unsigned char zeroes[0x100] = {0};
-    #define PRINT_KEY_WITH_NAME(ky, kn) do { if (memcmp(ky, zeroes, sizeof(ky)) != 0) { printf("%-32s= ", #kn); for (unsigned int k_i = 0; k_i < sizeof(ky); k_i++) { printf("%02X", ky[k_i]); } printf("\n"); } } while (0)
-    #define PRINT_KEY_WITH_NAME_IDX(ky, kn, idx) do { if (memcmp(ky, zeroes, sizeof(ky)) != 0) { char KEY_NAME[32]; snprintf(KEY_NAME, sizeof(KEY_NAME), "%s_%02"PRIx32, #kn, idx); printf("%-32s= ", KEY_NAME); for (unsigned int k_i = 0; k_i < sizeof(ky); k_i++) { printf("%02X", ky[k_i]); } printf("\n"); } } while (0)
+void pki_print_keys(nca_keyset_t *keyset, int is_dev) {
+    static const unsigned char zeroes[0x100] = {0};
+    #define PRINT_KEY(ky, kn) do { \
+        if (memcmp(ky, zeroes, sizeof(ky)) != 0) { \
+            printf("%-32s= ", #kn); \
+            for (unsigned int k_i = 0; k_i < sizeof(ky); k_i++) printf("%02X", ky[k_i]); \
+            printf("\n"); \
+        } \
+    } while (0)
+    #define PRINT_KEY_IDX(ky, kn, idx) do { \
+        if (memcmp(ky, zeroes, sizeof(ky)) != 0) { \
+            char KEY_NAME[32]; \
+            snprintf(KEY_NAME, sizeof(KEY_NAME), "%s_%02"PRIx32, #kn, idx); \
+            printf("%-32s= ", KEY_NAME); \
+            for (unsigned int k_i = 0; k_i < sizeof(ky); k_i++) printf("%02X", ky[k_i]); \
+            printf("\n"); \
+        } \
+    } while (0)
 
-    PRINT_KEY_WITH_NAME(keyset->secure_boot_key, secure_boot_key);
-    PRINT_KEY_WITH_NAME(keyset->tsec_key, tsec_key);
-    PRINT_KEY_WITH_NAME(keyset->device_key, device_key);
-    PRINT_KEY_WITH_NAME(keyset->tsec_root_kek, tsec_root_kek);
-    PRINT_KEY_WITH_NAME(keyset->package1_mac_kek, package1_mac_kek);
-    PRINT_KEY_WITH_NAME(keyset->package1_kek, package1_kek);
+    PRINT_KEY(keyset->secure_boot_key, secure_boot_key);
+    PRINT_KEY(keyset->tsec_key, tsec_key);
+    PRINT_KEY(keyset->device_key, device_key);
     printf("\n");
-    for (unsigned int i = 0x6; i < 0x20; i++) {
-        PRINT_KEY_WITH_NAME_IDX(keyset->tsec_auth_signatures[i-6], tsec_auth_signature, i-6);
+
+    if (!is_dev) {
+        for (unsigned int i = 0; i < 3; i++) PRINT_KEY_IDX(keyset->tsec_root_kek_variants[i],    tsec_root_kek,    i);
+        for (unsigned int i = 0; i < 3; i++) PRINT_KEY_IDX(keyset->package1_kek_variants[i],     package1_kek,     i);
+        for (unsigned int i = 0; i < 3; i++) PRINT_KEY_IDX(keyset->package1_mac_kek_variants[i], package1_mac_kek, i);
+        printf("\n");
+    } else {
+        for (unsigned int i = 0; i < 3; i++) PRINT_KEY_IDX(keyset->tsec_root_kek_variants_dev[i],    tsec_root_kek_dev,    i);
+        for (unsigned int i = 0; i < 3; i++) PRINT_KEY_IDX(keyset->package1_kek_variants_dev[i],     package1_kek_dev,     i);
+        for (unsigned int i = 0; i < 3; i++) PRINT_KEY_IDX(keyset->package1_mac_kek_variants_dev[i], package1_mac_kek_dev, i);
+        printf("\n");
     }
+
+    for (unsigned int i = 0; i < 3; i++) PRINT_KEY_IDX(keyset->tsec_auth_signatures[i], tsec_auth_signature, i);
     printf("\n");
-    for (unsigned int i = 0x6; i < 0x20; i++) {
-        PRINT_KEY_WITH_NAME_IDX(keyset->tsec_root_keys[i-6], tsec_root_key, i-6);
+
+    if (!is_dev) {
+        for (unsigned int i = 0; i < 3; i++) PRINT_KEY_IDX(keyset->tsec_root_keys[i],    tsec_root_key,    i);
+        for (unsigned int i = 6; i < 9; i++) PRINT_KEY_IDX(keyset->package1_keys[i],     package1_key,     i);
+        for (unsigned int i = 6; i < 9; i++) PRINT_KEY_IDX(keyset->package1_mac_keys[i], package1_mac_key, i);
+        printf("\n");
+    } else {
+        for (unsigned int i = 0; i < 3; i++) PRINT_KEY_IDX(keyset->tsec_root_keys_dev[i],    tsec_root_key_dev,    i);
+        for (unsigned int i = 6; i < 9; i++) PRINT_KEY_IDX(keyset->package1_keys_dev[i],     package1_key_dev,     i);
+        for (unsigned int i = 6; i < 9; i++) PRINT_KEY_IDX(keyset->package1_mac_keys_dev[i], package1_mac_key_dev, i);
+        printf("\n");
     }
+
+    PRINT_KEY(keyset->keyblob_mac_key_source, keyblob_mac_key_source);
+    for (unsigned int i = 0; i < 6; i++) PRINT_KEY_IDX(keyset->keyblob_key_sources[i],  keyblob_key_source,  i);
     printf("\n");
-    PRINT_KEY_WITH_NAME(keyset->keyblob_mac_key_source, keyblob_mac_key_source);
-    for (unsigned int i = 0; i < 0x6; i++) {
-        PRINT_KEY_WITH_NAME_IDX(keyset->keyblob_key_sources[i], keyblob_key_source, i);
+    for (unsigned int i = 0; i < 6; i++) PRINT_KEY_IDX(keyset->keyblob_keys[i],         keyblob_key,         i);
+    printf("\n");
+    for (unsigned int i = 0; i < 6; i++) PRINT_KEY_IDX(keyset->keyblob_mac_keys[i],     keyblob_mac_key,     i);
+    printf("\n");
+    for (unsigned int i = 0; i < 6; i++) PRINT_KEY_IDX(keyset->encrypted_keyblobs[i],   encrypted_keyblob,   i);
+    printf("\n");
+    for (unsigned int i = 0; i < 6; i++) PRINT_KEY_IDX(keyset->keyblobs[i],             keyblob,             i);
+    printf("\n");
+
+    for (unsigned int i = 0x08; i < 0x20; i++) PRINT_KEY_IDX(keyset->master_kek_sources[i], master_kek_source, i);
+    printf("\n");
+
+    if (!is_dev) {
+        PRINT_KEY(keyset->mariko_kek, mariko_kek);
+        PRINT_KEY(keyset->mariko_bek, mariko_bek);
+        for (unsigned int i = 0; i < 0xC; i++) PRINT_KEY_IDX(keyset->mariko_aes_class_keys[i], mariko_aes_class_key, i);
+        printf("\n");
+        for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->mariko_master_kek_sources[i], mariko_master_kek_source, i);
+        printf("\n");
+        for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->master_keks[i], master_kek, i);
+        printf("\n");
     }
+
+    PRINT_KEY(keyset->master_key_source, master_key_source);
     printf("\n");
-    for (unsigned int i = 0; i < 0x6; i++) {
-        PRINT_KEY_WITH_NAME_IDX(keyset->keyblob_keys[i], keyblob_key, i);
-    }
-    printf("\n");
-    for (unsigned int i = 0; i < 0x6; i++) {
-        PRINT_KEY_WITH_NAME_IDX(keyset->keyblob_mac_keys[i], keyblob_mac_key, i);
-    }
-    printf("\n");
-    for (unsigned int i = 0; i < 0x6; i++) {
-        PRINT_KEY_WITH_NAME_IDX(keyset->encrypted_keyblobs[i], encrypted_keyblob, i);
-    }
-    printf("\n");
-    for (unsigned int i = 0; i < 0x6; i++) {
-        PRINT_KEY_WITH_NAME_IDX(keyset->keyblobs[i], keyblob, i);
-    }
-    printf("\n");
-    for (unsigned int i = 0x6; i < 0x20; i++) {
-        PRINT_KEY_WITH_NAME_IDX(keyset->master_kek_sources[i], master_kek_source, i);
-    }
-    printf("\n");
-    PRINT_KEY_WITH_NAME(keyset->mariko_kek, mariko_kek);
-    PRINT_KEY_WITH_NAME(keyset->mariko_bek, mariko_bek);
-    for (unsigned int i = 0x0; i < 0xC; i++) {
-        PRINT_KEY_WITH_NAME_IDX(keyset->mariko_aes_class_keys[i], mariko_aes_class_key, i);
-    }
-    printf("\n");
-    for (unsigned int i = 0x0; i < 0x20; i++) {
-        PRINT_KEY_WITH_NAME_IDX(keyset->mariko_master_kek_sources[i], mariko_master_kek_source, i);
-    }
-    printf("\n");
-    for (unsigned int i = 0x0; i < 0x20; i++) {
-        PRINT_KEY_WITH_NAME_IDX(keyset->master_keks[i], master_kek, i);
-    }
-    printf("\n");
-    PRINT_KEY_WITH_NAME(keyset->master_key_source, master_key_source);
-    printf("\n");
-    for (unsigned int i = 0; i < 0x20; i++) {
-        PRINT_KEY_WITH_NAME_IDX(keyset->master_keys[i], master_key, i);
-    }
-    printf("\n");
-    for (unsigned int i = 0; i < 0x20; i++) {
-        PRINT_KEY_WITH_NAME_IDX(keyset->package1_keys[i], package1_key, i);
-    }
-    printf("\n");
-    for (unsigned int i = 0x6; i < 0x20; i++) {
-        PRINT_KEY_WITH_NAME_IDX(keyset->package1_mac_keys[i], package1_mac_key, i);
-    }
-    printf("\n");
-    PRINT_KEY_WITH_NAME(keyset->package2_key_source, package2_key_source);
-    printf("\n");
-    for (unsigned int i = 0; i < 0x20; i++) {
-        PRINT_KEY_WITH_NAME_IDX(keyset->package2_keys[i], package2_key, i);
-    }
-    printf("\n");
-    PRINT_KEY_WITH_NAME(keyset->per_console_key_source, per_console_key_source);
-    PRINT_KEY_WITH_NAME(keyset->aes_kek_generation_source, aes_kek_generation_source);
-    PRINT_KEY_WITH_NAME(keyset->aes_key_generation_source, aes_key_generation_source);
-    PRINT_KEY_WITH_NAME(keyset->titlekek_source, titlekek_source);
-    printf("\n");
-    for (unsigned int i = 0; i < 0x20; i++) {
-        PRINT_KEY_WITH_NAME_IDX(keyset->titlekeks[i], titlekek, i);
-    }
-    printf("\n");
-    PRINT_KEY_WITH_NAME(keyset->key_area_key_application_source, key_area_key_application_source);
-    PRINT_KEY_WITH_NAME(keyset->key_area_key_ocean_source, key_area_key_ocean_source);
-    PRINT_KEY_WITH_NAME(keyset->key_area_key_system_source, key_area_key_system_source);
-    PRINT_KEY_WITH_NAME(keyset->sd_card_kek_source, sd_card_kek_source);
-    PRINT_KEY_WITH_NAME(keyset->sd_card_key_sources[0], sd_card_save_key_source);
-    PRINT_KEY_WITH_NAME(keyset->sd_card_key_sources[1], sd_card_nca_key_source);
-    PRINT_KEY_WITH_NAME(keyset->save_mac_kek_source, save_mac_kek_source);
-    PRINT_KEY_WITH_NAME(keyset->save_mac_key_source, save_mac_key_source);
-    PRINT_KEY_WITH_NAME(keyset->save_mac_key, save_mac_key);
-    printf("\n");
-    PRINT_KEY_WITH_NAME(keyset->header_key_source, header_key_source);
-    PRINT_KEY_WITH_NAME(keyset->header_key, header_key);
-    printf("\n");
-    for (unsigned int i = 0; i < 0x20; i++) {
-        PRINT_KEY_WITH_NAME_IDX(keyset->key_area_keys[i][0], key_area_key_application, i);
-    }
-    printf("\n");
-    for (unsigned int i = 0; i < 0x20; i++) {
-        PRINT_KEY_WITH_NAME_IDX(keyset->key_area_keys[i][1], key_area_key_ocean, i);
-    }
-    printf("\n");
-    for (unsigned int i = 0; i < 0x20; i++) {
-        PRINT_KEY_WITH_NAME_IDX(keyset->key_area_keys[i][2], key_area_key_system, i);
+    if (!is_dev) {
+        for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->master_keys[i],     master_key,     i);
+    } else {
+        for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->master_keys_dev[i], master_key_dev, i);
     }
     printf("\n");
 
-    #undef PRINT_KEY_WITH_NAME_IDX
-    #undef PRINT_KEY_WITH_NAME
+    PRINT_KEY(keyset->package2_key_source, package2_key_source);
+    printf("\n");
+    for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->package2_keys[i], package2_key, i);
+    printf("\n");
+
+    PRINT_KEY(keyset->per_console_key_source,              per_console_key_source);
+    PRINT_KEY(keyset->aes_kek_generation_source,           aes_kek_generation_source);
+    PRINT_KEY(keyset->aes_key_generation_source,           aes_key_generation_source);
+    PRINT_KEY(keyset->titlekek_source,                     titlekek_source);
+    printf("\n");
+    for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->titlekeks[i], titlekek, i);
+    printf("\n");
+
+    PRINT_KEY(keyset->key_area_key_application_source, key_area_key_application_source);
+    PRINT_KEY(keyset->key_area_key_ocean_source,       key_area_key_ocean_source);
+    PRINT_KEY(keyset->key_area_key_system_source,      key_area_key_system_source);
+    PRINT_KEY(keyset->sd_card_kek_source,              sd_card_kek_source);
+    PRINT_KEY(keyset->sd_card_key_sources[0],          sd_card_save_key_source);
+    PRINT_KEY(keyset->sd_card_key_sources[1],          sd_card_nca_key_source);
+    PRINT_KEY(keyset->save_mac_kek_source,             save_mac_kek_source);
+    PRINT_KEY(keyset->save_mac_key_source,             save_mac_key_source);
+    PRINT_KEY(keyset->save_mac_key,                    save_mac_key);
+    printf("\n");
+
+    PRINT_KEY(keyset->header_kek_source,  header_kek_source);
+    PRINT_KEY(keyset->header_key_source,  header_key_source);
+    PRINT_KEY(keyset->header_kek,         header_kek);
+    PRINT_KEY(keyset->header_key,         header_key);
+    printf("\n");
+
+    for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->key_area_keys[i][0], key_area_key_application, i);
+    printf("\n");
+    for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->key_area_keys[i][1], key_area_key_ocean, i);
+    printf("\n");
+    for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->key_area_keys[i][2], key_area_key_system, i);
+    printf("\n");
+
+    #undef PRINT_KEY_IDX
+    #undef PRINT_KEY
 }
 
 void pki_initialize_keyset(nca_keyset_t *keyset, keyset_variant_t variant) {
+    int is_dev = (variant == KEYSET_DEV);
     switch (variant) {
         case KEYSET_DEV:
             memcpy(keyset, &nca_keys_dev, sizeof(*keyset));
@@ -606,5 +838,5 @@ void pki_initialize_keyset(nca_keyset_t *keyset, keyset_variant_t variant) {
             break;
     }
 
-    pki_derive_keys(keyset);
+    pki_derive_keys(keyset, is_dev);
 }

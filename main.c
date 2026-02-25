@@ -387,7 +387,7 @@ int main(int argc, char **argv) {
                         tool_ctx.settings.keyset.sd_card_key_sources[key][i] ^= tool_ctx.settings.sdseed[i & 0xF];
                     }
                 }
-                pki_derive_keys(&tool_ctx.settings.keyset);
+                pki_derive_keys(&tool_ctx.settings.keyset, tool_ctx.action & ACTION_DEV);
                 break;
             case 34:
                 filepath_set(&tool_ctx.settings.nax0_sd_path, optarg);
@@ -472,7 +472,7 @@ int main(int argc, char **argv) {
                 }
             }
         }
-        pki_derive_keys(&tool_ctx.settings.keyset);
+        pki_derive_keys(&tool_ctx.settings.keyset, tool_ctx.action & ACTION_DEV);
         fclose(keyfile);
     }
 
@@ -734,10 +734,10 @@ int main(int argc, char **argv) {
                 }
             }
             printf("Deriving keys...\n");
-            pki_derive_keys(&new_keyset);
+            pki_derive_keys(&tool_ctx.settings.keyset, tool_ctx.action & ACTION_DEV);
             printf("--\n");
             printf("All derivable keys (using loaded sources):\n\n");
-            pki_print_keys(&new_keyset);
+            pki_print_keys(&new_keyset, tool_ctx.action & ACTION_DEV);
             break;
         }
         case FILETYPE_SAVE: {
