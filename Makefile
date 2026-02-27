@@ -13,7 +13,7 @@ all:
 .c.o:
 	$(CC) $(INCLUDE) -c $(CFLAGS) -o $@ $<
 
-hactool$(EXEEXT): save.o sha.o aes.o extkeys.o rsa.o npdm.o bktr.o kip.o packages.o pki.o pfs0.o hfs0.o nca0_romfs.o romfs.o utils.o nax0.o nso.o lz4.o nca.o xci.o switchfs.o main.o filepath.o ConvertUTF.o cJSON.o
+hactool$(EXEEXT): save.o sha.o aes.o extkeys.o rsa.o npdm.o bktr.o kip.o packages.o pki.o pk11_extract_key_sources.o pfs0.o hfs0.o nca0_romfs.o romfs.o utils.o nax0.o nso.o lz4.o nca.o xci.o switchfs.o main.o filepath.o ConvertUTF.o cJSON.o
 	$(CC) -o $@ $^ -L $(LIBDIR) $(LDFLAGS)
 
 aes.o: aes.h types.h
@@ -33,6 +33,8 @@ lz4.o: lz4.h
 main.o: main.c pki.h types.h
 
 packages.o: packages.h aes.h kip.h types.h
+
+pk11_extract_key_sources.o: pk11_extract_key_sources.h 
 
 pfs0.o: pfs0.h types.h
 

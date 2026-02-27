@@ -1,6 +1,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "packages.h"
+#include "pk11_extract_key_sources.h"
 #include "aes.h"
 #include "rsa.h"
 #include "sha.h"
@@ -181,6 +182,7 @@ void pk11_process(pk11_ctx_t *ctx) {
 
     if (ctx->tool_ctx->action & ACTION_INFO) {
         pk11_print(ctx);
+        pk11_extract_and_print_key_sources(ctx);
     }
 
     if (ctx->tool_ctx->action & ACTION_EXTRACT) {
