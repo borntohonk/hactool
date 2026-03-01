@@ -294,16 +294,12 @@ static void embed_sources(nca_keyset_t *keyset) {
         memcpy(keyset->tsec_auth_signatures[2], tsec_auth_signatures[2], 0x10);
     }
 
-    if (memcmp(keyset->master_kek_sources[0x08], zeroes, 0x10) == 0) {
-        for (int i = 0; i < 13; i++) {
-            memcpy(keyset->master_kek_sources[0x08 + i], erista_master_kek_sources[i], 0x10);
-        }
+    for (size_t i = 0; i < sizeof(erista_master_kek_sources)/sizeof(erista_master_kek_sources[0]); i++) {
+        memcpy(keyset->master_kek_sources[0x08 + i], erista_master_kek_sources[i], 0x10);
     }
 
-    if (memcmp(keyset->mariko_master_kek_sources[0], zeroes, 0x10) == 0) {
-        for (int i = 0; i < 21; i++) {
-            memcpy(keyset->mariko_master_kek_sources[i], mariko_master_kek_sources[i], 0x10);
-        }
+    for (size_t i = 0; i < sizeof(mariko_master_kek_sources)/sizeof(mariko_master_kek_sources[0]); i++) {
+        memcpy(keyset->mariko_master_kek_sources[i], mariko_master_kek_sources[i], 0x10);
     }
 
     extern const unsigned char mariko_kek[0x10];
@@ -461,7 +457,6 @@ static int derive_master_keys_prod(nca_keyset_t *keyset, unsigned char outkeys[]
         ctx = new_aes_ctx(current, 0x10, AES_MODE_ECB);
         aes_decrypt(ctx, next, master_key_vectors[i], 0x10);
         free_aes_ctx(ctx);
-
         if (i == 7) {
             memcpy(temp[count++], current, 0x10);
             memcpy(temp[count++], next, 0x10);
@@ -474,6 +469,13 @@ static int derive_master_keys_prod(nca_keyset_t *keyset, unsigned char outkeys[]
     for (int i = 0; i < count; i++) {
         memcpy(outkeys[i], temp[count - 1 - i], 0x10);
     }
+
+    /* Shift up by one to insert duplicate at index 1 for unused key revision 0x01 */
+    for (int i = count; i > 1; i--) {
+        memcpy(outkeys[i], outkeys[i - 1], 0x10);
+    }
+    memcpy(outkeys[1], outkeys[0], 0x10);
+    count++;
 
     return count;
 }
@@ -515,13 +517,20 @@ static int derive_master_keys_dev(nca_keyset_t *keyset, unsigned char outkeys[][
         memcpy(outkeys[i], temp[count - 1 - i], 0x10);
     }
 
+    /* Shift up by one to insert duplicate at index 1 for unused key revision 0x01 */
+    for (int i = count; i > 1; i--) {
+        memcpy(outkeys[i], outkeys[i - 1], 0x10);
+    }
+    memcpy(outkeys[1], outkeys[0], 0x10);
+    count++;
+
     return count;
 }
 
 static void derive_complete_master_keys_prod(nca_keyset_t *keyset) {
     static const unsigned char zeroes[0x10] = {0};
 
-    unsigned char old_keys[9][0x10];
+    unsigned char old_keys[10][0x10];
     int old_count = derive_master_keys_prod(keyset, old_keys);
     if (old_count < 0) return;
 
@@ -529,8 +538,8 @@ static void derive_complete_master_keys_prod(nca_keyset_t *keyset) {
         memcpy(&keyset->master_keys[i], old_keys[i], 0x10);
     }
 
-    int total = old_count;
-    for (int i = 0x09; i <= 0x14; i++) {
+    int total = 0x0A;
+    for (int i = 0x09; i < 0x20; i++) {
         if (memcmp(keyset->master_kek_sources[i], zeroes, 0x10) == 0) continue;
 
         unsigned char master_kek[0x10];
@@ -547,7 +556,7 @@ static void derive_complete_master_keys_prod(nca_keyset_t *keyset) {
 static void derive_complete_master_keys_dev(nca_keyset_t *keyset) {
     static const unsigned char zeroes[0x10] = {0};
 
-    unsigned char old_keys[9][0x10];
+    unsigned char old_keys[10][0x10];
     int old_count = derive_master_keys_dev(keyset, old_keys);
     if (old_count < 0) return;
 
@@ -555,8 +564,8 @@ static void derive_complete_master_keys_dev(nca_keyset_t *keyset) {
         memcpy(&keyset->master_keys_dev[i], old_keys[i], 0x10);
     }
 
-    int total = old_count;
-    for (int i = 0x09; i <= 0x14; i++) {
+    int total = 0x0A;
+    for (int i = 0x09; i < 0x20; i++) {
         if (memcmp(keyset->master_kek_sources[i], zeroes, 0x10) == 0) continue;
 
         unsigned char master_kek[0x10];
@@ -760,7 +769,7 @@ void pki_print_keys(nca_keyset_t *keyset, int is_dev) {
     for (unsigned int i = 0; i < 6; i++) PRINT_KEY_IDX(keyset->keyblobs[i],             keyblob,             i);
     printf("\n");
 
-    for (unsigned int i = 0x08; i < 0x20; i++) PRINT_KEY_IDX(keyset->master_kek_sources[i], master_kek_source, i);
+    for (unsigned int i = 0x08; i < 0x20; i++) PRINT_KEY_IDX(keyset->master_kek_sources[i], master_kek_source, i + 1);
     printf("\n");
 
     if (!is_dev) {
@@ -768,9 +777,9 @@ void pki_print_keys(nca_keyset_t *keyset, int is_dev) {
         PRINT_KEY(keyset->mariko_bek, mariko_bek);
         for (unsigned int i = 0; i < 0xC; i++) PRINT_KEY_IDX(keyset->mariko_aes_class_keys[i], mariko_aes_class_key, i);
         printf("\n");
-        for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->mariko_master_kek_sources[i], mariko_master_kek_source, i);
+        for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->mariko_master_kek_sources[i], mariko_master_kek_source, i < 1 ? i : i + 1);
         printf("\n");
-        for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->master_keks[i], master_kek, i);
+        for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->master_keks[i], master_kek, i < 1 ? i : i + 1);
         printf("\n");
     }
 

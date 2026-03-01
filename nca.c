@@ -425,7 +425,7 @@ void nca_process(nca_ctx_t *ctx) {
     if (ctx->header.KeyGeneration > ctx->header.KeyGenerationOld)
         ctx->crypto_type = ctx->header.KeyGeneration;
 
-    if (ctx->crypto_type)
+    if (ctx->crypto_type == 1)
         ctx->crypto_type--; /* 0, 1 are both master key 0. */
 
     /* Rights ID. */
