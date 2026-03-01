@@ -235,44 +235,46 @@ const char *get_key_revision_summary(uint8_t key_rev) {
         case 0x00:
             return "1.0.0-2.3.0";
         case 0x01:
-            return "3.0.0";
+            return "2.0.0 - UNUSED";
         case 0x02:
-            return "3.0.1-3.0.2";
+            return "3.0.0";
         case 0x03:
-            return "4.0.0-4.1.0";
+            return "3.0.1-3.0.2";
         case 0x04:
-            return "5.0.0-5.1.0";
+            return "4.0.0-4.1.0";
         case 0x05:
-            return "6.0.0-6.1.0";
+            return "5.0.0-5.1.0";
         case 0x06:
-            return "6.2.0";
+            return "6.0.0-6.1.0";
         case 0x07:
-            return "7.0.0-8.0.1";
+            return "6.2.0";
         case 0x08:
-            return "8.1.0-8.1.1";
+            return "7.0.0-8.0.1";
         case 0x09:
-            return "9.0.0-9.0.1";
+            return "8.1.0-8.1.1";
         case 0x0A:
-            return "9.1.0-12.0.3";
+            return "9.0.0-9.0.1";
         case 0x0B:
-            return "12.1.0";
+            return "9.1.0-12.0.3";
         case 0x0C:
-            return "13.0.0-13.2.1";
+            return "12.1.0";
         case 0x0D:
-            return "14.0.0-14.1.2";
+            return "13.0.0-13.2.1";
         case 0x0E:
-            return "15.0.0";
+            return "14.0.0-14.1.2";
         case 0x0F:
-            return "16.0.0-16.1.0";
+            return "15.0.0";
         case 0x10:
-            return "17.0.0-17.0.1";
+            return "16.0.0-16.1.0";
         case 0x11:
-            return "18.0.0-18.1.0";
+            return "17.0.0-17.0.1";
         case 0x12:
-            return "19.0.0-19.0.2";
+            return "18.0.0-18.1.0";
         case 0x13:
-            return "20.0.0-20.5.0";
+            return "19.0.0-19.0.2";
         case 0x14:
+            return "20.0.0-20.5.0";
+        case 0x15:
             return "21.0.0-";
         default:
             return "Unknown";

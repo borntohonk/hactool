@@ -192,8 +192,8 @@ static void switchfs_process_nca(switchfs_ctx_t *ctx, const char *nca_filename, 
     }
     
     /* Extract title ID and content type */
-    uint64_t title_id = temp_nca_ctx.header.title_id;
-    uint8_t content_type = temp_nca_ctx.header.content_type;
+    uint64_t title_id = temp_nca_ctx.header.ProgramId;
+    uint8_t content_type = temp_nca_ctx.header.ContentType;
     
     fclose(temp_file);
     

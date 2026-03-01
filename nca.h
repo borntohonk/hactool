@@ -92,15 +92,15 @@ typedef struct {
     uint8_t fixed_key_sig[0x100]; /* RSA-PSS signature over header with fixed key. */
     uint8_t npdm_key_sig[0x100]; /* RSA-PSS signature over header with key in NPDM. */
     uint32_t magic;
-    uint8_t distribution; /* System vs gamecard. */
-    uint8_t content_type;
-    uint8_t crypto_type; /* Which keyblob (field 1) */
-    uint8_t kaek_ind; /* Which kaek index? */
-    uint64_t nca_size; /* Entire archive size. */
-    uint64_t title_id;
-    uint8_t _0x218[0x4]; /* Padding. */
+    uint8_t DistributionType; /* System vs gamecard. */
+    uint8_t ContentType;
+    uint8_t KeyGenerationOld; /* Which keyblob (field 1) */
+    uint8_t KeyAreaEncryptionKeyIndex; /* Which kaek index? */
+    uint64_t ContentSize; /* Entire archive size. */
+    uint64_t ProgramId;
+    uint8_t ContentIndex;
     union {
-        uint32_t sdk_version; /* What SDK was this built with? */
+        uint32_t SdkAddonVersion; /* What SDK was this built with? */
         struct {
             uint8_t sdk_revision;
             uint8_t sdk_micro;
@@ -108,10 +108,10 @@ typedef struct {
             uint8_t sdk_major;
         };
     };
-    uint8_t crypto_type2; /* Which keyblob (field 2) */
-    uint8_t fixed_key_generation;
+    uint8_t KeyGeneration; /* Which keyblob (field 2) */
+    uint8_t SignatureKeyGeneration;
     uint8_t _0x222[0xE]; /* Padding. */
-    uint8_t rights_id[0x10]; /* Rights ID (for titlekey crypto). */
+    uint8_t RightsId[0x10]; /* Rights ID (for titlekey crypto). */
     nca_section_entry_t section_entries[4]; /* Section entry metadata. */
     uint8_t section_hashes[4][0x20]; /* SHA-256 hashes for each section header. */
     uint8_t encrypted_keys[4][0x10]; /* Encrypted key area. */

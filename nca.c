@@ -410,8 +410,8 @@ void nca_process(nca_ctx_t *ctx) {
         return;
     }
 
-    if (ctx->header.fixed_key_generation < sizeof(ctx->tool_ctx->settings.keyset.nca_hdr_fixed_key_moduli) / sizeof(ctx->tool_ctx->settings.keyset.nca_hdr_fixed_key_moduli[0])) {
-        if (rsa2048_pss_verify(&ctx->header.magic, 0x200, ctx->header.fixed_key_sig, ctx->tool_ctx->settings.keyset.nca_hdr_fixed_key_moduli[ctx->header.fixed_key_generation])) {
+    if (ctx->header.SignatureKeyGeneration < sizeof(ctx->tool_ctx->settings.keyset.nca_hdr_fixed_key_moduli) / sizeof(ctx->tool_ctx->settings.keyset.nca_hdr_fixed_key_moduli[0])) {
+        if (rsa2048_pss_verify(&ctx->header.magic, 0x200, ctx->header.fixed_key_sig, ctx->tool_ctx->settings.keyset.nca_hdr_fixed_key_moduli[ctx->header.SignatureKeyGeneration])) {
             ctx->fixed_sig_validity = VALIDITY_VALID;
         } else {
             ctx->fixed_sig_validity = VALIDITY_INVALID;
@@ -421,24 +421,24 @@ void nca_process(nca_ctx_t *ctx) {
     }
 
     /* Sort out crypto type. */
-    ctx->crypto_type = ctx->header.crypto_type;
-    if (ctx->header.crypto_type2 > ctx->header.crypto_type)
-        ctx->crypto_type = ctx->header.crypto_type2;
+    ctx->crypto_type = ctx->header.KeyGenerationOld;
+    if (ctx->header.KeyGeneration > ctx->header.KeyGenerationOld)
+        ctx->crypto_type = ctx->header.KeyGeneration;
 
     if (ctx->crypto_type)
         ctx->crypto_type--; /* 0, 1 are both master key 0. */
 
     /* Rights ID. */
     for (unsigned int i = 0; i < 0x10; i++) {
-        if (ctx->header.rights_id[i] != 0) {
+        if (ctx->header.RightsId[i] != 0) {
             ctx->has_rights_id = 1;
             break;
         }
     }
 
     if (ctx->is_cli_target && ctx->tool_ctx->base_nca_ctx != NULL) {
-        uint64_t base_tid = ctx->tool_ctx->base_nca_ctx->header.title_id;
-        uint64_t expectation = ctx->header.title_id & 0xFFFFFFFFFFFFF7FFULL;
+        uint64_t base_tid = ctx->tool_ctx->base_nca_ctx->header.ProgramId;
+        uint64_t expectation = ctx->header.ProgramId & 0xFFFFFFFFFFFFF7FFULL;
         if (base_tid != expectation) {
             printf("[WARN] Base NCA Title ID doesn't match expectation (%016"PRIx64" != %016"PRIx64")\n", base_tid, expectation);
         }
@@ -446,7 +446,7 @@ void nca_process(nca_ctx_t *ctx) {
 
     /* Enforce content type for extraction if required. */
     if (ctx->tool_ctx->settings.has_expected_content_type) {
-        if (ctx->tool_ctx->settings.expected_content_type != ctx->header.content_type) {
+        if (ctx->tool_ctx->settings.expected_content_type != ctx->header.ContentType) {
             ctx->tool_ctx->action &= ~(ACTION_EXTRACT);
         }
     }
@@ -459,8 +459,8 @@ void nca_process(nca_ctx_t *ctx) {
         aes_ctx_t *aes_ctx = new_aes_ctx(ctx->tool_ctx->settings.keyset.titlekeks[ctx->crypto_type], 16, AES_MODE_ECB);
         if (ctx->is_cli_target && ctx->tool_ctx->settings.has_cli_titlekey) {
             aes_decrypt(aes_ctx, ctx->tool_ctx->settings.dec_cli_titlekey, ctx->tool_ctx->settings.cli_titlekey, 0x10);
-        } else if (settings_has_titlekey(&ctx->tool_ctx->settings, ctx->header.rights_id)) {
-            titlekey_entry_t *entry = settings_get_titlekey(&ctx->tool_ctx->settings, ctx->header.rights_id);
+        } else if (settings_has_titlekey(&ctx->tool_ctx->settings, ctx->header.RightsId)) {
+            titlekey_entry_t *entry = settings_get_titlekey(&ctx->tool_ctx->settings, ctx->header.RightsId);
             aes_decrypt(aes_ctx, entry->dec_titlekey, entry->titlekey, 0x10);
         }
         free_aes_ctx(aes_ctx);
@@ -517,8 +517,8 @@ void nca_process(nca_ctx_t *ctx) {
                 if (ctx->has_rights_id) {
                     if (ctx->is_cli_target && ctx->tool_ctx->settings.has_cli_titlekey) {
                         ctx->section_contexts[i].aes = new_aes_ctx(ctx->tool_ctx->settings.dec_cli_titlekey, 16, AES_MODE_CTR);
-                    } else if (settings_has_titlekey(&ctx->tool_ctx->settings, ctx->header.rights_id)) {
-                        titlekey_entry_t *entry = settings_get_titlekey(&ctx->tool_ctx->settings, ctx->header.rights_id);
+                    } else if (settings_has_titlekey(&ctx->tool_ctx->settings, ctx->header.RightsId)) {
+                        titlekey_entry_t *entry = settings_get_titlekey(&ctx->tool_ctx->settings, ctx->header.RightsId);
                         ctx->section_contexts[i].aes = new_aes_ctx(entry->dec_titlekey, 16, AES_MODE_CTR);
                     } else {
                         if (i == 0) {
@@ -609,8 +609,6 @@ int nca_decrypt_header(nca_ctx_t *ctx) {
 
     nca_header_t dec_header;
 
-
-
     aes_ctx_t *hdr_aes_ctx = new_aes_ctx(ctx->tool_ctx->settings.keyset.header_key, 32, AES_MODE_XTS);
     aes_xts_decrypt(hdr_aes_ctx, &dec_header, &ctx->header, 0x400, 0, 0x200);
 
@@ -651,7 +649,7 @@ int nca_decrypt_header(nca_ctx_t *ctx) {
                 memcpy(ctx->decrypted_keys, dec_header.encrypted_keys, 0x40);
             } else {
                 ctx->format_version = NCAVERSION_NCA0;
-                aes_ctx_t *aes_ctx = new_aes_ctx(ctx->tool_ctx->settings.keyset.key_area_keys[ctx->crypto_type][dec_header.kaek_ind], 16, AES_MODE_ECB);
+                aes_ctx_t *aes_ctx = new_aes_ctx(ctx->tool_ctx->settings.keyset.key_area_keys[ctx->crypto_type][dec_header.KeyAreaEncryptionKeyIndex], 16, AES_MODE_ECB);
                 aes_decrypt(aes_ctx, ctx->decrypted_keys, dec_header.encrypted_keys, 0x20);
                 free_aes_ctx(aes_ctx);
             }
@@ -682,14 +680,14 @@ int nca_decrypt_header(nca_ctx_t *ctx) {
 /* Decrypt key area. */
 void nca_decrypt_key_area(nca_ctx_t *ctx) {
     if (ctx->format_version == NCAVERSION_NCA0_BETA || ctx->format_version == NCAVERSION_NCA0) return;
-    aes_ctx_t *aes_ctx = new_aes_ctx(ctx->tool_ctx->settings.keyset.key_area_keys[ctx->crypto_type][ctx->header.kaek_ind], 16, AES_MODE_ECB);
+    aes_ctx_t *aes_ctx = new_aes_ctx(ctx->tool_ctx->settings.keyset.key_area_keys[ctx->crypto_type][ctx->header.KeyAreaEncryptionKeyIndex], 16, AES_MODE_ECB);
     aes_decrypt(aes_ctx, ctx->decrypted_keys, ctx->header.encrypted_keys, 0x40);
     free_aes_ctx(aes_ctx);
 }
 
 
 static const char *nca_get_distribution_type(nca_ctx_t *ctx) {
-    switch (ctx->header.distribution) {
+    switch (ctx->header.DistributionType) {
         case 0:
             return "Download";
         case 1:
@@ -700,7 +698,7 @@ static const char *nca_get_distribution_type(nca_ctx_t *ctx) {
 }
 
 static const char *nca_get_content_type(nca_ctx_t *ctx) {
-    switch (ctx->header.content_type) {
+    switch (ctx->header.ContentType) {
         case 0:
             return "Program";
         case 1:
@@ -827,13 +825,13 @@ void nca_print(nca_ctx_t *ctx) {
     print_magic("Magic:                              ", ctx->header.magic);
 
     if (ctx->tool_ctx->action & ACTION_VERIFY) {
-        if (ctx->header.fixed_key_generation < sizeof(ctx->tool_ctx->settings.keyset.nca_hdr_fixed_key_moduli) / sizeof(ctx->tool_ctx->settings.keyset.nca_hdr_fixed_key_moduli[0])) {
-            printf("Fixed-Key Index (GOOD):             0x%"PRIX8"\n", ctx->header.fixed_key_generation);
+        if (ctx->header.SignatureKeyGeneration < sizeof(ctx->tool_ctx->settings.keyset.nca_hdr_fixed_key_moduli) / sizeof(ctx->tool_ctx->settings.keyset.nca_hdr_fixed_key_moduli[0])) {
+            printf("Fixed-Key Index (GOOD):             0x%"PRIX8"\n", ctx->header.SignatureKeyGeneration);
         } else {
-            printf("Fixed-Key Index (FAIL):             0x%"PRIX8"\n", ctx->header.fixed_key_generation);
+            printf("Fixed-Key Index (FAIL):             0x%"PRIX8"\n", ctx->header.SignatureKeyGeneration);
         }
     } else {
-        printf("Fixed-Key Index:                    0x%"PRIX8"\n", ctx->header.fixed_key_generation);
+        printf("Fixed-Key Index:                    0x%"PRIX8"\n", ctx->header.SignatureKeyGeneration);
     }
 
     if (ctx->tool_ctx->action & ACTION_VERIFY && ctx->fixed_sig_validity != VALIDITY_UNCHECKED) {
@@ -854,8 +852,8 @@ void nca_print(nca_ctx_t *ctx) {
     } else {
          memdump(stdout, "NPDM Signature:                     ", &ctx->header.npdm_key_sig, 0x100);
     }
-    printf("Content Size:                       0x%012"PRIx64"\n", ctx->header.nca_size);
-    printf("Title ID:                           %016"PRIx64"\n", ctx->header.title_id);
+    printf("Content Size:                       0x%012"PRIx64"\n", ctx->header.ContentSize);
+    printf("Title ID:                           %016"PRIx64"\n", ctx->header.ProgramId);
     printf("SDK Version:                        %"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8"\n", ctx->header.sdk_major, ctx->header.sdk_minor, ctx->header.sdk_micro, ctx->header.sdk_revision);
     printf("Distribution type:                  %s\n", nca_get_distribution_type(ctx));
     printf("Content Type:                       %s\n", nca_get_content_type(ctx));
@@ -863,14 +861,14 @@ void nca_print(nca_ctx_t *ctx) {
     printf("Encryption Type:                    %s\n", nca_get_encryption_type(ctx));
 
     if (ctx->has_rights_id) {
-        memdump(stdout, "Rights ID:                          ", &ctx->header.rights_id, 0x10);
+        memdump(stdout, "Rights ID:                          ", &ctx->header.RightsId, 0x10);
         if (ctx->is_cli_target && ctx->tool_ctx->settings.has_cli_titlekey) {
             if (!ctx->tool_ctx->settings.suppress_keydata_output) {
                 memdump(stdout, "Titlekey (Encrypted) (From CLI)     ", ctx->tool_ctx->settings.cli_titlekey, 0x10);
                 memdump(stdout, "Titlekey (Decrypted) (From CLI)     ", ctx->tool_ctx->settings.dec_cli_titlekey, 0x10);
             }
-        } else if (settings_has_titlekey(&ctx->tool_ctx->settings, ctx->header.rights_id)) {
-            titlekey_entry_t *entry = settings_get_titlekey(&ctx->tool_ctx->settings, ctx->header.rights_id);
+        } else if (settings_has_titlekey(&ctx->tool_ctx->settings, ctx->header.RightsId)) {
+            titlekey_entry_t *entry = settings_get_titlekey(&ctx->tool_ctx->settings, ctx->header.RightsId);
             if (!ctx->tool_ctx->settings.suppress_keydata_output) {
                 memdump(stdout, "Titlekey (Encrypted)                ", entry->titlekey, 0x10);
                 memdump(stdout, "Titlekey (Decrypted)                ", entry->dec_titlekey, 0x10);
@@ -879,7 +877,7 @@ void nca_print(nca_ctx_t *ctx) {
             printf("Titlekey:                           Unknown\n");
         }
     } else {
-        printf("Key Area Encryption Key:            %"PRIx8"\n", ctx->header.kaek_ind);
+        printf("Key Area Encryption Key:            %"PRIx8"\n", ctx->header.KeyAreaEncryptionKeyIndex);
         nca_print_key_area(ctx);
     }
 
