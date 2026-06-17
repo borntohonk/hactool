@@ -530,7 +530,7 @@ static void derive_complete_master_keys_prod(nca_keyset_t *keyset) {
     }
 
     int total = old_count;
-    for (int i = 0x09; i <= 0x14; i++) {
+    for (int i = 0x09; i <= 0x20; i++) {
         if (memcmp(keyset->master_kek_sources[i], zeroes, 0x10) == 0) continue;
 
         unsigned char master_kek[0x10];
@@ -556,7 +556,7 @@ static void derive_complete_master_keys_dev(nca_keyset_t *keyset) {
     }
 
     int total = old_count;
-    for (int i = 0x09; i <= 0x14; i++) {
+    for (int i = 0x09; i <= 0x20; i++) {
         if (memcmp(keyset->master_kek_sources[i], zeroes, 0x10) == 0) continue;
 
         unsigned char master_kek[0x10];
