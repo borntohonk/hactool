@@ -24,7 +24,7 @@ typedef struct {
 typedef struct {
     uint8_t master_hash[0x20]; /* SHA-256 hash of the hash table. */
     uint32_t block_size; /* In bytes. */
-    uint32_t always_2;
+    uint32_t layer_count;
     uint64_t hash_table_offset; /* Normally zero. */
     uint64_t hash_table_size;
     uint64_t pfs0_offset;

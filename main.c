@@ -16,6 +16,11 @@
 #include "nso.h"
 #include "save.h"
 #include "switchfs.h"
+#include "swipc.h"
+#include "nacp.h"
+#include "cnmt.h"
+#include "nsp.h"
+#include "find_patterns.h"
 
 static const char *prog_name = "hactool";
 
@@ -35,7 +40,7 @@ static void usage(void) {
         "  -y, --verify       Verify hashes and signatures.\n"
         "  -d, --dev          Decrypt with development keys instead of retail.\n"
         "  -k, --keyset       Load keys from an external file.\n"
-        "  -t, --intype=type  Specify input file type [nca, xci, pfs0, romfs, hfs0, npdm, pk11, pk21, ini1, kip1, nax0, save, switchfs, keygen]\n"
+        "  -t, --intype=type  Specify input file type [nca, xci, pfs0, romfs, hfs0, npdm, pk11, pk21, ini1, kip1, nax0, save, switchfs, swipc, keygen, nsp, nacp, cnmt, findpatterns]\n"
         "  --titlekey=key     Set title key for Rights ID crypto titles.\n"
         "  --contentkey=key   Set raw key for NCA body decryption.\n"
         "  --disablekeywarns  Disables warning output when loading external keys.\n"
@@ -65,6 +70,13 @@ static void usage(void) {
         "  --suppresskeys     Suppress output of decrypted keys.\n"
         "NPDM options:\n"
         "  --json=file        Specify file path for saving JSON representation of program permissions to.\n"
+        "NACP options:\n"
+        "  --nacpjson=file    Specify file path for saving JSON representation of application control properties to.\n"
+        "CNMT options:\n"
+        "  --cnmtjson=file    Specify file path for saving JSON representation of content meta to.\n"
+        "NSP options:\n"
+        "  --pfs0dir=dir      Specify directory path for extracting NSP contents.\n"
+        "  --outdir=dir       Specify directory path for extracting NSP contents. Overrides --pfs0dir.\n"
         "KIP1 options:\n"
         "  --json=file        Specify file path for saving JSON representation of program permissions to.\n"
         "  --uncompressed=f   Specify file path for saving uncompressed KIP1.\n"
@@ -109,6 +121,16 @@ static void usage(void) {
         "  --listfiles        List files in save file.\n"
         "SwitchFS options:\n"
         "  --outdir=dir       Specify output directory path for organized firmware.\n"
+        "FindPatterns options:\n"
+        "  --batch=file                               Run batch mode from a JSON spec file (implies findpatterns).\n"
+        "  --pattern=hex[:bytes[:offset[:matchpos]]]  Add a pattern (repeatable; ? = any nibble).\n"
+        "                                              :bytes enables patch output.\n"
+        "                                              :offset (decimal) shifts patch address from match start.\n"
+        "                                              :matchpos (decimal, default 0) selects which match to patch.\n"
+        "  --patch=hex:bytes[:offset[:matchpos]]      Alias for --pattern with patch output.\n"
+        "  --ips-out=file     Write IPS patch file for all --patch matches.\n"
+        "  --hekate-out=file  Write Hekate-style text patch for all --patch matches.\n"
+        "  --log-out=file     Write JSON log of batch run results (use with --batch).\n"
         "Key Derivation options:\n"
         "  --sbk=key          Set console unique Secure Boot Key for key derivation.\n"
         "  --tseckey=key      Set console unique TSEC Key for key derivation.\n"
@@ -196,6 +218,14 @@ int main(int argc, char **argv) {
             {"xcontenttype", 1, NULL, 42},
             {"appendsectypes", 0, NULL, 43},
             {"suppresskeys", 0, NULL, 44},
+            {"nacpjson", 1, NULL, 45},
+            {"cnmtjson", 1, NULL, 46},
+            {"pattern",    1, NULL, 47},
+            {"patch",      1, NULL, 48},
+            {"ips-out",    1, NULL, 49},
+            {"hekate-out", 1, NULL, 50},
+            {"batch",      1, NULL, 51},
+            {"log-out",   1, NULL, 52},
             {NULL, 0, NULL, 0},
         };
 
@@ -253,10 +283,20 @@ int main(int argc, char **argv) {
                     nca_ctx.tool_ctx->file_type = FILETYPE_NAX0;
                 } else if (!strcmp(optarg, "switchfs")) {
                     nca_ctx.tool_ctx->file_type = FILETYPE_SWITCHFS;
+                } else if (!strcmp(optarg, "swipc")) {
+                    nca_ctx.tool_ctx->file_type = FILETYPE_SWIPC;
                 } else if (!strcmp(optarg, "keygen") || !strcmp(optarg, "keys") || !strcmp(optarg, "boot0") || !strcmp(optarg, "boot")) {
                     nca_ctx.tool_ctx->file_type = FILETYPE_BOOT0;
                 } else if (!strcmp(optarg, "save")) {
                     nca_ctx.tool_ctx->file_type = FILETYPE_SAVE;
+                } else if (!strcmp(optarg, "nacp")) {
+                    nca_ctx.tool_ctx->file_type = FILETYPE_NACP;
+                } else if (!strcmp(optarg, "cnmt")) {
+                    nca_ctx.tool_ctx->file_type = FILETYPE_CNMT;
+                } else if (!strcmp(optarg, "nsp") || !strcmp(optarg, "nsx")) {
+                    nca_ctx.tool_ctx->file_type = FILETYPE_NSP;
+                } else if (!strcmp(optarg, "findpatterns") || !strcmp(optarg, "fp")) {
+                    nca_ctx.tool_ctx->file_type = FILETYPE_FINDPATTERNS;
                 }
                 break;
             case 0: filepath_set(&nca_ctx.tool_ctx->settings.section_paths[0], optarg); break;
@@ -443,6 +483,104 @@ int main(int argc, char **argv) {
             case 44:
                 nca_ctx.tool_ctx->settings.suppress_keydata_output = 1;
                 break;
+            case 45:
+                filepath_set(&tool_ctx.settings.nacp_json_path, optarg);
+                break;
+            case 46:
+                filepath_set(&tool_ctx.settings.cnmt_json_path, optarg);
+                break;
+            case 47: {
+                if (nca_ctx.tool_ctx->settings.fp_num_patterns >= FP_MAX_PATTERNS) {
+                    fprintf(stderr, "Warning: too many patterns (max %d), ignoring \"%s\"\n", FP_MAX_PATTERNS, optarg);
+                    break;
+                }
+                fp_pattern_entry_t *e = &nca_ctx.tool_ctx->settings.fp_patterns[nca_ctx.tool_ctx->settings.fp_num_patterns++];
+                char *sep1 = strchr(optarg, ':');
+                if (sep1) {
+                    size_t pat_part_len = (size_t)(sep1 - optarg);
+                    if (pat_part_len >= FP_PATTERN_LEN) pat_part_len = FP_PATTERN_LEN - 1;
+                    memcpy(e->pattern, optarg, pat_part_len);
+                    e->pattern[pat_part_len] = '\0';
+                    char *sep2 = strchr(sep1 + 1, ':');
+                    if (sep2) {
+                        size_t pb_len = (size_t)(sep2 - (sep1 + 1));
+                        if (pb_len >= FP_PATCH_LEN) pb_len = FP_PATCH_LEN - 1;
+                        memcpy(e->patch_bytes, sep1 + 1, pb_len);
+                        e->patch_bytes[pb_len] = '\0';
+                        char *sep3 = strchr(sep2 + 1, ':');
+                        if (sep3) {
+                            e->patch_offset   = atoi(sep2 + 1);
+                            e->match_position = atoi(sep3 + 1);
+                        } else {
+                            e->patch_offset   = atoi(sep2 + 1);
+                            e->match_position = 0;
+                        }
+                    } else {
+                        strncpy(e->patch_bytes, sep1 + 1, FP_PATCH_LEN - 1);
+                        e->patch_offset   = 0;
+                        e->match_position = 0;
+                    }
+                    e->has_patch = 1;
+                } else {
+                    strncpy(e->pattern, optarg, FP_PATTERN_LEN - 1);
+                    e->has_patch = 0;
+                }
+                break;
+            }
+            case 48: {
+                if (nca_ctx.tool_ctx->settings.fp_num_patterns >= FP_MAX_PATTERNS) {
+                    fprintf(stderr, "Warning: too many patterns (max %d), ignoring \"%s\"\n", FP_MAX_PATTERNS, optarg);
+                    break;
+                }
+                char *sep1 = strchr(optarg, ':');
+                if (!sep1) {
+                    fprintf(stderr, "Error: --patch requires format \"pattern:patchbytes[:offset[:matchpos]]\", got \"%s\"\n", optarg);
+                    break;
+                }
+                fp_pattern_entry_t *e = &nca_ctx.tool_ctx->settings.fp_patterns[nca_ctx.tool_ctx->settings.fp_num_patterns++];
+                size_t pat_part_len = (size_t)(sep1 - optarg);
+                if (pat_part_len >= FP_PATTERN_LEN) pat_part_len = FP_PATTERN_LEN - 1;
+                memcpy(e->pattern, optarg, pat_part_len);
+                e->pattern[pat_part_len] = '\0';
+                char *sep2 = strchr(sep1 + 1, ':');
+                if (sep2) {
+                    size_t pb_len = (size_t)(sep2 - (sep1 + 1));
+                    if (pb_len >= FP_PATCH_LEN) pb_len = FP_PATCH_LEN - 1;
+                    memcpy(e->patch_bytes, sep1 + 1, pb_len);
+                    e->patch_bytes[pb_len] = '\0';
+                    char *sep3 = strchr(sep2 + 1, ':');
+                    if (sep3) {
+                        e->patch_offset   = atoi(sep2 + 1);
+                        e->match_position = atoi(sep3 + 1);
+                    } else {
+                        e->patch_offset   = atoi(sep2 + 1);
+                        e->match_position = 0;
+                    }
+                } else {
+                    strncpy(e->patch_bytes, sep1 + 1, FP_PATCH_LEN - 1);
+                    e->patch_offset   = 0;
+                    e->match_position = 0;
+                }
+                e->has_patch = 1;
+                break;
+            }
+            case 49:
+                nca_ctx.tool_ctx->settings.fp_ips_path.enabled = 1;
+                filepath_set(&nca_ctx.tool_ctx->settings.fp_ips_path.path, optarg);
+                break;
+            case 50:
+                nca_ctx.tool_ctx->settings.fp_hekate_path.enabled = 1;
+                filepath_set(&nca_ctx.tool_ctx->settings.fp_hekate_path.path, optarg);
+                break;
+            case 51:
+                nca_ctx.tool_ctx->settings.fp_batch_path.enabled = 1;
+                filepath_set(&nca_ctx.tool_ctx->settings.fp_batch_path.path, optarg);
+                nca_ctx.tool_ctx->file_type = FILETYPE_FINDPATTERNS;
+                break;
+            case 52:
+                nca_ctx.tool_ctx->settings.fp_log_path.enabled = 1;
+                filepath_set(&nca_ctx.tool_ctx->settings.fp_log_path.path, optarg);
+                break;
             default:
                 usage();
                 return EXIT_FAILURE;
@@ -485,7 +623,7 @@ int main(int argc, char **argv) {
     if (optind == argc - 1) {
         /* Copy input filename. */
         strncpy(input_name, argv[optind], sizeof(input_name) - 1);
-    } else if (tool_ctx.file_type != FILETYPE_BOOT0 && tool_ctx.file_type != FILETYPE_SWITCHFS && ((optind < argc) || (argc == 1))) {
+    } else if (tool_ctx.file_type != FILETYPE_BOOT0 && tool_ctx.file_type != FILETYPE_SWITCHFS && tool_ctx.file_type != FILETYPE_SWIPC && !tool_ctx.settings.fp_batch_path.enabled && ((optind < argc) || (argc == 1))) {
         usage();
     }
 
@@ -498,6 +636,17 @@ int main(int argc, char **argv) {
         switchfs_ctx.tool_ctx = &tool_ctx;
         switchfs_process(&switchfs_ctx);
         printf("Done!\n");
+        return EXIT_SUCCESS;
+    }
+
+    /* Special case SWIPC. */
+    if (tool_ctx.file_type == FILETYPE_SWIPC) {
+        swipc_ctx_t swipc_ctx;
+        memset(&swipc_ctx, 0, sizeof(swipc_ctx));
+        strncpy(swipc_ctx.input_dir, input_name, sizeof(swipc_ctx.input_dir) - 1);
+        strncpy(swipc_ctx.output_dir, nca_ctx.tool_ctx->settings.out_dir_path.path.char_path, sizeof(swipc_ctx.output_dir) - 1);
+        swipc_ctx.tool_ctx = &tool_ctx;
+        swipc_process(&swipc_ctx);
         return EXIT_SUCCESS;
     }
 
@@ -524,7 +673,7 @@ int main(int argc, char **argv) {
         return EXIT_SUCCESS;
     }
 
-    if ((tool_ctx.file = fopen(input_name, "rb")) == NULL && tool_ctx.file_type != FILETYPE_BOOT0) {
+    if ((tool_ctx.file = fopen(input_name, "rb")) == NULL && tool_ctx.file_type != FILETYPE_BOOT0 && !tool_ctx.settings.fp_batch_path.enabled) {
         fprintf(stderr, "unable to open %s: %s\n", input_name, strerror(errno));
         return EXIT_FAILURE;
     }
@@ -634,6 +783,59 @@ int main(int argc, char **argv) {
                 exit(EXIT_FAILURE);
             }
             npdm_process(npdm, &tool_ctx);
+            break;
+        }
+        case FILETYPE_NACP: {
+            nacp_t *nacp = malloc(NACP_TOTAL_SIZE);
+            if (nacp == NULL) {
+                fprintf(stderr, "Failed to allocate NACP!\n");
+                exit(EXIT_FAILURE);
+            }
+            memset(nacp, 0, NACP_TOTAL_SIZE);
+            if (fread(nacp, 1, NACP_TOTAL_SIZE, tool_ctx.file) != NACP_TOTAL_SIZE) {
+                fprintf(stderr, "Failed to read NACP (file may be smaller than 0x4000 bytes)!\n");
+                free(nacp);
+                exit(EXIT_FAILURE);
+            }
+            nacp_process(nacp, &tool_ctx);
+            free(nacp);
+            break;
+        }
+        case FILETYPE_CNMT: {
+            fseeko64(tool_ctx.file, 0, SEEK_END);
+            long cnmt_file_sz = ftello64(tool_ctx.file);
+            fseeko64(tool_ctx.file, 0, SEEK_SET);
+            if (cnmt_file_sz <= 0) {
+                fprintf(stderr, "Failed to determine CNMT file size!\n");
+                exit(EXIT_FAILURE);
+            }
+            uint8_t *cnmt_buf = malloc((size_t)cnmt_file_sz);
+            if (cnmt_buf == NULL) {
+                fprintf(stderr, "Failed to allocate CNMT buffer!\n");
+                exit(EXIT_FAILURE);
+            }
+            if (fread(cnmt_buf, 1, (size_t)cnmt_file_sz, tool_ctx.file) != (size_t)cnmt_file_sz) {
+                fprintf(stderr, "Failed to read CNMT!\n");
+                free(cnmt_buf);
+                exit(EXIT_FAILURE);
+            }
+            cnmt_ctx_t cnmt_ctx;
+            if (cnmt_parse(&cnmt_ctx, cnmt_buf, (size_t)cnmt_file_sz)) {
+                cnmt_process(&cnmt_ctx, &tool_ctx);
+                cnmt_free(&cnmt_ctx);
+            }
+            free(cnmt_buf);
+            break;
+        }
+        case FILETYPE_NSP: {
+            nsp_ctx_t nsp_ctx;
+            memset(&nsp_ctx, 0, sizeof(nsp_ctx));
+            nsp_ctx.file = tool_ctx.file;
+            nsp_ctx.tool_ctx = &tool_ctx;
+            nsp_process(&nsp_ctx);
+            if (nsp_ctx.pfs0_ctx.header) {
+                free(nsp_ctx.pfs0_ctx.header);
+            }
             break;
         }
         case FILETYPE_HFS0: {
@@ -747,6 +949,14 @@ int main(int argc, char **argv) {
             save_ctx.tool_ctx = &tool_ctx;
             save_process(&save_ctx);
             save_free_contexts(&save_ctx);
+            break;
+        }
+        case FILETYPE_FINDPATTERNS: {
+            find_patterns_ctx_t fp_ctx;
+            memset(&fp_ctx, 0, sizeof(fp_ctx));
+            fp_ctx.file     = tool_ctx.file;
+            fp_ctx.tool_ctx = &tool_ctx;
+            find_patterns_process(&fp_ctx);
             break;
         }
         default: {

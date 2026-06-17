@@ -28,13 +28,20 @@ void pfs0_process(pfs0_ctx_t *ctx) {
         exit(EXIT_FAILURE);
     }
 
-    /* Weak file validation. */
-    uint64_t max_size = 0x1ULL;
-    max_size <<= 48; /* Switch file sizes are capped at 48 bits. */
-    uint64_t cur_ofs = 0;
+    if (ctx->header->num_files > 1000000) {
+        fprintf(stderr, "PFS0 file count is unreasonably large (%"PRIu32")!\n", ctx->header->num_files);
+        exit(EXIT_FAILURE);
+    }
+
+    /* Validate file entry offsets are monotonically non-decreasing. */
+    uint64_t max_offset = 0;
     for (unsigned int i = 0; i < ctx->header->num_files; i++) {
         pfs0_file_entry_t *cur_file = pfs0_get_file_entry(ctx->header, i);
-        cur_ofs += cur_file->size;
+        if (cur_file->offset < max_offset) {
+            fprintf(stderr, "PFS0 file %u offset (0x%"PRIx64") overlaps previous entry!\n", i, cur_file->offset);
+            exit(EXIT_FAILURE);
+        }
+        max_offset = cur_file->offset + cur_file->size;
     }
 
     for (unsigned int i = 0; i < ctx->header->num_files; i++) {
@@ -118,11 +125,14 @@ void pfs0_print(pfs0_ctx_t *ctx) {
         printf("Title ID:                           %016"PRIx64"\n", npdm_get_aci0(ctx->npdm)->title_id);
     }
     printf("Number of files:                    %"PRId32"\n", ctx->header->num_files);
-    if (ctx->header->num_files > 0 && ctx->header->num_files < 15) { /* Arbitrary. */
-        printf("Files:");
+    if (ctx->header->num_files > 0) {
+        printf("Files:\n");
         for (unsigned int i = 0; i < ctx->header->num_files; i++) {
             pfs0_file_entry_t *cur_file = pfs0_get_file_entry(ctx->header, i);
-            printf("%spfs0:/%-32s %012"PRIx64"-%012"PRIx64"\n", i == 0 ? "                              " : "                                    ", pfs0_get_file_name(ctx->header, i), cur_file->offset, cur_file->offset + cur_file->size);
+            printf("    pfs0:/%-32s %012"PRIx64"-%012"PRIx64" (%"PRIu64" bytes)\n",
+                   pfs0_get_file_name(ctx->header, i),
+                   cur_file->offset, cur_file->offset + cur_file->size,
+                   cur_file->size);
         }
     }
     if (ctx->is_exefs) {

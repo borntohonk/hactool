@@ -295,13 +295,13 @@ static void embed_sources(nca_keyset_t *keyset) {
     }
 
     if (memcmp(keyset->master_kek_sources[0x08], zeroes, 0x10) == 0) {
-        for (int i = 0; i < 13; i++) {
+        for (int i = 0; i < 14; i++) {
             memcpy(keyset->master_kek_sources[0x08 + i], erista_master_kek_sources[i], 0x10);
         }
     }
 
     if (memcmp(keyset->mariko_master_kek_sources[0], zeroes, 0x10) == 0) {
-        for (int i = 0; i < 21; i++) {
+        for (int i = 0; i < 22; i++) {
             memcpy(keyset->mariko_master_kek_sources[i], mariko_master_kek_sources[i], 0x10);
         }
     }
@@ -719,6 +719,9 @@ void pki_print_keys(nca_keyset_t *keyset, int is_dev) {
     PRINT_KEY(keyset->secure_boot_key, secure_boot_key);
     PRINT_KEY(keyset->tsec_key, tsec_key);
     PRINT_KEY(keyset->device_key, device_key);
+    printf("\n");
+
+    PRINT_KEY(keyset->hovi_kek, hovi_kek);
     printf("\n");
 
     if (!is_dev) {

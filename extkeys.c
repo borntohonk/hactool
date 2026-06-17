@@ -299,6 +299,12 @@ void extkeys_initialize_settings(hactool_settings_t *settings, FILE *f) {
             } else if (strcmp(key, "package1_kek") == 0) {
                 parse_hex_key(keyset->package1_kek, value, sizeof(keyset->package1_kek));
                 matched_key = 1;
+            } else if (strcmp(key, "hovi_kek") == 0 || strcmp(key, "tsec_secret_26") == 0) {
+                parse_hex_key(keyset->hovi_kek, value, sizeof(keyset->hovi_kek));
+                matched_key = 1;
+            } else if (strcmp(key, "header_kek") == 0) {
+                parse_hex_key(keyset->header_kek, value, sizeof(keyset->header_kek));
+                matched_key = 1;
             } else if (strcmp(key, "beta_nca0_exponent") == 0) {
                 unsigned char exponent[0x100] = {0};
                 parse_hex_key(exponent, value, sizeof(exponent));
@@ -308,6 +314,49 @@ void extkeys_initialize_settings(hactool_settings_t *settings, FILE *f) {
                 matched_key = 1;
             }  else {
                 char test_name[0x100] = {0};
+                for (unsigned int i = 0; i < 3 && !matched_key; i++) {
+                    snprintf(test_name, sizeof(test_name), "tsec_root_kek_%02"PRIx32, i);
+                    if (strcmp(key, test_name) == 0) {
+                        parse_hex_key(keyset->tsec_root_kek_variants[i], value, sizeof(keyset->tsec_root_kek_variants[i]));
+                        matched_key = 1;
+                        break;
+                    }
+
+                    snprintf(test_name, sizeof(test_name), "package1_kek_%02"PRIx32, i);
+                    if (strcmp(key, test_name) == 0) {
+                        parse_hex_key(keyset->package1_kek_variants[i], value, sizeof(keyset->package1_kek_variants[i]));
+                        matched_key = 1;
+                        break;
+                    }
+
+                    snprintf(test_name, sizeof(test_name), "package1_mac_kek_%02"PRIx32, i);
+                    if (strcmp(key, test_name) == 0) {
+                        parse_hex_key(keyset->package1_mac_kek_variants[i], value, sizeof(keyset->package1_mac_kek_variants[i]));
+                        matched_key = 1;
+                        break;
+                    }
+
+                    snprintf(test_name, sizeof(test_name), "tsec_root_kek_dev_%02"PRIx32, i);
+                    if (strcmp(key, test_name) == 0) {
+                        parse_hex_key(keyset->tsec_root_kek_variants_dev[i], value, sizeof(keyset->tsec_root_kek_variants_dev[i]));
+                        matched_key = 1;
+                        break;
+                    }
+
+                    snprintf(test_name, sizeof(test_name), "package1_kek_dev_%02"PRIx32, i);
+                    if (strcmp(key, test_name) == 0) {
+                        parse_hex_key(keyset->package1_kek_variants_dev[i], value, sizeof(keyset->package1_kek_variants_dev[i]));
+                        matched_key = 1;
+                        break;
+                    }
+
+                    snprintf(test_name, sizeof(test_name), "package1_mac_kek_dev_%02"PRIx32, i);
+                    if (strcmp(key, test_name) == 0) {
+                        parse_hex_key(keyset->package1_mac_kek_variants_dev[i], value, sizeof(keyset->package1_mac_kek_variants_dev[i]));
+                        matched_key = 1;
+                        break;
+                    }
+                }
                 for (unsigned int i = 0; i < 0x6 && !matched_key; i++) {
                     snprintf(test_name, sizeof(test_name), "keyblob_key_source_%02"PRIx32, i);
                     if (strcmp(key, test_name) == 0) {

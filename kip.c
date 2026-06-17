@@ -304,3 +304,216 @@ void kip1_save(kip1_ctx_t *ctx) {
         }
     }
 }
+
+/* BLZ (Backward LZ77) compressor for a single KIP1 section.
+ *
+ * The decompressor (kip1_blz_uncompress) reads the compressed buffer
+ * BACKWARD: cmp_ofs starts at the end and decrements toward 0.  The
+ * compressor must therefore write its output BACKWARD too — the control
+ * byte and its associated literal/reference bytes must appear at
+ * DECREASING buffer addresses so that the decompressor reads them in the
+ * correct order.
+ *
+ * Layout of one group (8 operations) as seen by the decompressor (highest
+ * address first):
+ *   ctrl_byte | op7_hi [op7_lo] | op6_byte | op5_hi [op5_lo] | ...
+ *
+ * For a back-reference the two bytes are:
+ *   hi = ((len-3) << 4) | ((ofs-3) >> 8)
+ *   lo = (ofs-3) & 0xFF
+ * and hi is at the higher address (read first by decompressor as
+ * cmp_start[cmp_ofs+1]), lo at the lower address (cmp_start[cmp_ofs]).
+ *
+ * Returns a malloc'd buffer (caller must free) with compressed data + 12-byte
+ * footer, sets *out_size.  Returns NULL if compression yields no benefit. */
+static void *kip1_blz_compress_section(const uint8_t *src, uint32_t src_size,
+                                        uint32_t *out_size) {
+    if (src_size == 0) { *out_size = 0; return NULL; }
+
+    /* Worst case: all literals → 1 control byte per 8 data bytes */
+    uint32_t max_cmp = src_size + (src_size + 7) / 8 + 16; /* +16 extra safety */
+    uint8_t *cmp = (uint8_t *)calloc(1, max_cmp);
+    if (!cmp) return NULL;
+
+    /* Write backward: write_pos decrements from max_cmp toward 0.
+     * The compressed data occupies cmp[write_pos..max_cmp-1] when done. */
+    uint32_t write_pos = max_cmp;
+    int32_t  pos = (int32_t)src_size;  /* next byte to emit, decrements toward 0 */
+
+    while (pos > 0) {
+        /* Collect up to 8 operations for this group */
+        uint8_t ctrl = 0;
+        uint8_t group_data[8 * 2]; /* at most 2 bytes per op (back-ref) */
+        int     gd_len = 0;
+
+        for (int bit = 7; bit >= 0 && pos > 0; bit--) {
+            /* Search for a back-reference.  A match of length L at offset O means:
+             *   src[pos-1-k] == src[pos-1-k+O]  for k in [0, L-1]
+             * (we're working backward; the match source is O positions ahead in
+             * the buffer, i.e. at a higher address / already emitted region). */
+            uint32_t best_len = 0, best_ofs = 0;
+            uint32_t max_ofs  = (uint32_t)(src_size - pos);
+            if (max_ofs > 4098) max_ofs = 4098;
+
+            if (max_ofs >= 3) {
+                for (uint32_t ofs = 3; ofs <= max_ofs; ofs++) {
+                    uint32_t max_len = ((uint32_t)pos < 18u) ? (uint32_t)pos : 18u;
+                    uint32_t len = 0;
+                    while (len < max_len &&
+                           src[pos - 1 - len] == src[pos - 1 - len + ofs])
+                        len++;
+                    if (len > best_len) {
+                        best_len = len;
+                        best_ofs = ofs;
+                        if (best_len == 18) break;
+                    }
+                }
+            }
+
+            if (best_len >= 3) {
+                ctrl |= (1u << bit);
+                /* hi byte: upper 4 bits = (len-3), lower 4 bits = high nibble of (ofs-3)
+                 * lo byte: lower 8 bits of (ofs-3)
+                 * Decompressor reads hi at cmp_start[cmp_ofs+1], lo at cmp_start[cmp_ofs].
+                 * Writing backward: hi goes at higher address (first write), lo at lower. */
+                uint8_t hi = (uint8_t)(((best_len - 3u) << 4) | (((best_ofs - 3u) >> 8) & 0xFu));
+                uint8_t lo = (uint8_t)((best_ofs - 3u) & 0xFFu);
+                group_data[gd_len++] = hi;
+                group_data[gd_len++] = lo;
+                pos -= (int32_t)best_len;
+            } else {
+                group_data[gd_len++] = src[--pos];
+            }
+        }
+
+        /* Write this group backward into cmp[]:
+         * ctrl byte goes at the highest position (first written → highest --write_pos),
+         * then group_data bytes at consecutively lower positions.
+         * Decompressor reads highest-address byte first (as ctrl), then decrements. */
+        if (write_pos < (uint32_t)(1 + gd_len)) {
+            free(cmp);
+            return NULL; /* shouldn't happen with correct max_cmp */
+        }
+        cmp[--write_pos] = ctrl;
+        for (int i = 0; i < gd_len; i++)
+            cmp[--write_pos] = group_data[i];
+    }
+
+    /* Compressed data occupies cmp[write_pos..max_cmp-1] */
+    uint32_t cmp_data_size = max_cmp - write_pos;
+    uint32_t total         = cmp_data_size + 12;
+
+    if (total >= src_size) {
+        free(cmp);
+        *out_size = 0;
+        return NULL;
+    }
+
+    uint8_t *result = (uint8_t *)malloc(total);
+    if (!result) { free(cmp); return NULL; }
+
+    memcpy(result, cmp + write_pos, cmp_data_size);
+    free(cmp);
+
+    /* 12-byte footer: [cmp_and_hdr_size][header_size=12][addl_size]
+     * cmp_and_hdr_size = total (includes footer)
+     * addl_size = src_size - cmp_data_size  (extra buffer space for decompressor) */
+    uint32_t *footer = (uint32_t *)(result + cmp_data_size);
+    footer[0] = total;
+    footer[1] = 12;
+    footer[2] = src_size - cmp_data_size;
+
+    *out_size = total;
+    return result;
+}
+
+/* Re-compress a decompressed KIP1 (flags bits 0-2 all clear) back to a compressed
+ * KIP1.  Each section is BLZ-compressed; if a section does not shrink it is left
+ * uncompressed.  Returns a malloc'd buffer (caller must free) with the full
+ * re-compressed KIP1, sets *out_size.  Returns NULL on failure.
+ * Use kip1_blz_compress_section / SHA256 of the result as the canonical module ID
+ * when only a decompressed KIP1 is available. */
+void *kip1_recompress_buf(const void *src, size_t src_size, size_t *out_size) {
+    if (src_size < sizeof(kip1_header_t)) return NULL;
+    const kip1_header_t *hdr = (const kip1_header_t *)src;
+    if (hdr->magic != MAGIC_KIP1) return NULL;
+
+    /* Build the new compressed KIP1 in a temporary buffer.
+     * Worst case size = original decompressed KIP1 size (nothing compresses). */
+    uint8_t *result = (uint8_t *)calloc(1, src_size + 128); /* +128 for safety */
+    if (!result) return NULL;
+
+    kip1_header_t new_hdr = *hdr;
+
+    const uint8_t *sec_data = (const uint8_t *)src + 0x100;
+    uint32_t       write_ofs = 0x100;
+    uint32_t       read_ofs  = 0;
+
+    for (unsigned int i = 0; i < 3; i++) {
+        uint32_t sec_size = hdr->section_headers[i].out_size;
+
+        if (sec_size == 0) {
+            new_hdr.section_headers[i].compressed_size = 0;
+            read_ofs += 0;
+            continue;
+        }
+
+        uint32_t cmp_size = 0;
+        void *cmp = kip1_blz_compress_section(sec_data + read_ofs, sec_size, &cmp_size);
+
+        if (cmp && cmp_size < sec_size) {
+            /* Use compressed version */
+            new_hdr.section_headers[i].compressed_size = cmp_size;
+            new_hdr.flags |= (1u << i);
+            memcpy(result + write_ofs, cmp, cmp_size);
+            write_ofs += cmp_size;
+            free(cmp);
+        } else {
+            /* Section does not compress — store as-is */
+            if (cmp) free(cmp);
+            new_hdr.section_headers[i].compressed_size = sec_size;
+            new_hdr.flags &= ~(1u << i);
+            memcpy(result + write_ofs, sec_data + read_ofs, sec_size);
+            write_ofs += sec_size;
+        }
+
+        read_ofs += sec_size;
+    }
+
+    /* Copy in the new header */
+    *((kip1_header_t *)result) = new_hdr;
+
+    *out_size = write_ofs;
+    return result;
+}
+
+void *kip1_decompress_buf(const void *src, size_t src_size, size_t *out_size) {
+    if (src_size < sizeof(kip1_header_t)) return NULL;
+    const kip1_header_t *hdr = (const kip1_header_t *)src;
+    if (hdr->magic != MAGIC_KIP1) return NULL;
+
+    kip1_header_t new_hdr = *hdr;
+    for (unsigned int i = 0; i < 3; i++)
+        new_hdr.section_headers[i].compressed_size = new_hdr.section_headers[i].out_size;
+    new_hdr.flags &= 0xF8;
+
+    uint64_t new_size = kip1_get_size_from_header(&new_hdr);
+    unsigned char *out = calloc(1, (size_t)new_size);
+    if (out == NULL) return NULL;
+    *((kip1_header_t *)out) = new_hdr;
+
+    uint64_t new_ofs = 0x100;
+    uint64_t old_ofs = 0x100;
+    for (unsigned int i = 0; i < 3; i++) {
+        uint32_t cmp_sz = hdr->section_headers[i].compressed_size;
+        uint32_t out_sz = hdr->section_headers[i].out_size;
+        memcpy(out + new_ofs, (const unsigned char *)src + old_ofs, cmp_sz);
+        if (hdr->flags & (1u << i))
+            kip1_blz_uncompress(out + new_ofs + cmp_sz);
+        new_ofs += out_sz;
+        old_ofs += cmp_sz;
+    }
+
+    if (out_size != NULL) *out_size = (size_t)new_size;
+    return out;
+}

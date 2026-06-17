@@ -22,9 +22,9 @@ typedef struct {
     uint64_t offset;      /* Offset of this BKTR table within the section */
     uint64_t size;        /* Size of this BKTR table */
     uint32_t magic;       /* MAGIC_BKTR ("BKTR") */
-    uint32_t _0x14;       /* Version or reserved field */
+    uint32_t version;     /* Version (matches bktr_table_header_t.version) */
     uint32_t num_entries; /* Number of entries in the BKTR */
-    uint32_t _0x1C;       /* Reserved field */
+    uint32_t reserved;    /* Reserved */
 } bktr_header_t;
 #pragma pack(pop)
 
@@ -80,7 +80,7 @@ typedef struct {
  */
 #pragma pack(push, 1)
 typedef struct {
-    uint32_t _0x0;
+    uint32_t index;
     uint32_t num_entries;
     uint64_t virtual_offset_end;
     bktr_relocation_entry_t entries[0x3FF0/sizeof(bktr_relocation_entry_t)];
@@ -94,7 +94,7 @@ typedef struct {
  */
 #pragma pack(push, 1)
 typedef struct {
-    uint32_t _0x0;
+    uint32_t index;
     uint32_t num_buckets;
     uint64_t total_size;
     uint64_t bucket_virtual_offsets[0x3FF0/sizeof(uint64_t)];
@@ -127,7 +127,7 @@ typedef struct {
  */
 #pragma pack(push, 1)
 typedef struct {
-    uint32_t _0x0;
+    uint32_t index;
     uint32_t num_entries;
     uint64_t physical_offset_end;
     bktr_subsection_entry_t entries[0x3FF];
@@ -139,7 +139,7 @@ typedef struct {
  */
 #pragma pack(push, 1)
 typedef struct {
-    uint32_t _0x0;
+    uint32_t index;
     uint32_t num_buckets;
     uint64_t total_size;
     uint64_t bucket_physical_offsets[0x3FF0/sizeof(uint64_t)];

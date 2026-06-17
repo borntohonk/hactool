@@ -89,6 +89,18 @@ typedef struct {
     filepath_t path;
 } override_filepath_t;
 
+#define FP_MAX_PATTERNS 64
+#define FP_PATTERN_LEN  256
+#define FP_PATCH_LEN    256
+
+typedef struct {
+    char pattern[FP_PATTERN_LEN];
+    char patch_bytes[FP_PATCH_LEN];
+    int  has_patch;
+    int  patch_offset;   /* bytes from match start to where the patch is written (decimal) */
+    int  match_position; /* which match to use for patch output (0 = first) */
+} fp_pattern_entry_t;
+
 typedef struct {
     unsigned char rights_id[0x10];
     unsigned char titlekey[0x10];
@@ -140,6 +152,14 @@ typedef struct {
     filepath_t nax0_path;
     filepath_t nax0_sd_path;
     filepath_t npdm_json_path;
+    filepath_t nacp_json_path;
+    filepath_t cnmt_json_path;
+    fp_pattern_entry_t fp_patterns[FP_MAX_PATTERNS];
+    int fp_num_patterns;
+    override_filepath_t fp_ips_path;
+    override_filepath_t fp_hekate_path;
+    override_filepath_t fp_batch_path;
+    override_filepath_t fp_log_path;
 } hactool_settings_t;
 
 enum hactool_file_type
@@ -159,7 +179,12 @@ enum hactool_file_type
     FILETYPE_NAX0,
     FILETYPE_BOOT0,
     FILETYPE_SAVE,
-    FILETYPE_SWITCHFS
+    FILETYPE_SWITCHFS,
+    FILETYPE_NACP,
+    FILETYPE_CNMT,
+    FILETYPE_NSP,
+    FILETYPE_SWIPC,
+    FILETYPE_FINDPATTERNS
 };
 
 #define ACTION_INFO (1<<0)

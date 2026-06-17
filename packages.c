@@ -596,3 +596,144 @@ void pk21_save(pk21_ctx_t *ctx) {
         ini1_save(&ctx->ini1_ctx);
     }
 }
+
+/* ── pk21_process_buffer ────────────────────────────────────────────────────
+ * Mirror of extract_packages.process_filesystem_package_object().
+ * Decrypts Package2 from a memory buffer, locates INI1, and calls
+ * callback() once per KIP1 (with the raw compressed KIP1 bytes).
+ * -------------------------------------------------------------------------- */
+int pk21_process_buffer(const unsigned char *pkg2_data,
+                        size_t               pkg2_size,
+                        hactool_ctx_t       *tool_ctx,
+                        pk21_kip_callback_t  callback,
+                        void                *userdata) {
+    if (pkg2_size < sizeof(pk21_header_t) + 4) {
+        fprintf(stderr, "pk21: buffer too small (0x%zx bytes)\n", pkg2_size);
+        return 0;
+    }
+
+    /* Work on a mutable copy so we can decrypt in-place. */
+    unsigned char *buf = malloc(pkg2_size);
+    if (buf == NULL) {
+        fprintf(stderr, "pk21: out of memory\n");
+        return 0;
+    }
+    memcpy(buf, pkg2_data, pkg2_size);
+
+    pk21_header_t *hdr = (pk21_header_t *)buf;
+
+    /* Check whether the header is encrypted.
+     * Mirrors packages.c logic: encrypted if signature != all-zero AND magic != PK21. */
+    int is_encrypted = 0;
+    for (unsigned int i = 0; i < 0x100; i++) {
+        if (hdr->signature[i] != 0) { is_encrypted = 1; break; }
+    }
+    if (hdr->magic == MAGIC_PK21) is_encrypted = 0;
+
+    if (is_encrypted) {
+        unsigned char orig_ctr[0x10];
+        memcpy(orig_ctr, hdr->ctr, 0x10);
+
+        int found_key = 0;
+        for (unsigned int ki = 0; ki < 0x20 && !found_key; ki++) {
+            /* Trial-decrypt the 0x100-byte region starting at hdr->ctr. */
+            pk21_header_t trial;
+            memcpy(&trial, hdr, sizeof(trial));
+            aes_ctx_t *aes = new_aes_ctx(tool_ctx->settings.keyset.package2_keys[ki], 0x10, AES_MODE_CTR);
+            aes_setiv(aes, orig_ctr, 0x10);
+            aes_decrypt(aes, (unsigned char *)&trial.ctr[0],
+                             (unsigned char *)&trial.ctr[0], 0x100);
+            if (trial.magic == MAGIC_PK21) {
+                /* Key found — commit the decrypted header, restore original CTR. */
+                memcpy(hdr, &trial, sizeof(trial));
+                memcpy(hdr->ctr, orig_ctr, 0x10);
+
+                /* Decrypt each body section in-place. */
+                unsigned char *sec_ptr = buf + sizeof(pk21_header_t);
+                for (unsigned int si = 0; si < 3; si++) {
+                    if (hdr->section_sizes[si] == 0) continue;
+                    aes_ctx_t *sec_aes = new_aes_ctx(
+                        tool_ctx->settings.keyset.package2_keys[ki], 0x10, AES_MODE_CTR);
+                    aes_setiv(sec_aes, hdr->section_ctrs[si], 0x10);
+                    aes_decrypt(sec_aes, sec_ptr, sec_ptr, hdr->section_sizes[si]);
+                    free_aes_ctx(sec_aes);
+                    sec_ptr += hdr->section_sizes[si];
+                }
+                found_key = 1;
+            }
+            free_aes_ctx(aes);
+        }
+
+        if (!found_key) {
+            fprintf(stderr, "pk21: failed to decrypt header with any package2 key\n");
+            free(buf);
+            return 0;
+        }
+    }
+
+    if (hdr->magic != MAGIC_PK21) {
+        fprintf(stderr, "pk21: bad magic after decryption\n");
+        free(buf);
+        return 0;
+    }
+
+    uint32_t sec0_size = hdr->section_sizes[0];
+    uint32_t sec1_size = hdr->section_sizes[1];
+
+    unsigned char *sections = buf + sizeof(pk21_header_t);
+
+    /* Locate INI1.
+     * sec1 > 0 → INI1 is section 1 (directly after section 0).
+     * sec1 == 0 → INI1 is embedded in the kernel (8.0.0+); search for magic. */
+    ini1_header_t *ini1 = NULL;
+    if (sec1_size > 0) {
+        ini1 = (ini1_header_t *)(sections + sec0_size);
+    } else {
+        /* Scan the kernel section for the INI1 magic byte-by-byte (aligned to 4). */
+        for (uint32_t k = 0; k + (uint32_t)sizeof(ini1_header_t) <= sec0_size; k += 4) {
+            ini1_header_t *cand = (ini1_header_t *)(sections + k);
+            if (cand->magic == MAGIC_INI1 &&
+                cand->num_processes > 0 &&
+                cand->num_processes <= INI1_MAX_KIPS) {
+                ini1 = cand;
+                break;
+            }
+        }
+    }
+
+    if (ini1 == NULL || ini1->magic != MAGIC_INI1) {
+        fprintf(stderr, "pk21: INI1 not found\n");
+        free(buf);
+        return 0;
+    }
+
+    if (ini1->num_processes > INI1_MAX_KIPS) {
+        fprintf(stderr, "pk21: INI1 num_processes too large (%"PRIu32")\n", ini1->num_processes);
+        free(buf);
+        return 0;
+    }
+
+    /* Walk KIP1 entries and fire callback for each. */
+    uint64_t offset = 0;
+    for (uint32_t ki = 0; ki < ini1->num_processes; ki++) {
+        kip1_header_t *kip = (kip1_header_t *)&ini1->kip_data[offset];
+        if (kip->magic != MAGIC_KIP1) {
+            fprintf(stderr, "pk21: bad KIP1 magic at KIP index %"PRIu32"\n", ki);
+            break;
+        }
+        uint64_t kip_size = kip1_get_size_from_header(kip);
+
+        char kip_name[0xD];
+        memcpy(kip_name, kip->name, 0xC);
+        kip_name[0xC] = '\0';
+
+        if (callback != NULL) {
+            callback(kip_name, (const unsigned char *)kip, kip_size, userdata);
+        }
+
+        offset += kip_size;
+    }
+
+    free(buf);
+    return 1;
+}

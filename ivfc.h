@@ -33,7 +33,7 @@ typedef struct {
     uint32_t master_hash_size;
     uint32_t num_levels;
     ivfc_level_hdr_t level_headers[IVFC_MAX_LEVEL];
-    uint8_t _0xA0[0x20];
+    uint8_t signature_salt[0x20];
     uint8_t master_hash[0x20];
 } ivfc_hdr_t;
 

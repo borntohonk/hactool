@@ -84,7 +84,10 @@ typedef struct {
             uint32_t section_ctr_high;
         };
     };
-    uint8_t _0x148[0xB8]; /* Padding. */
+    uint8_t sparse_info[0x30];             /* 0x148: SparseInfo */
+    uint8_t compression_info[0x28];        /* 0x178: CompressionInfo */
+    uint8_t metadata_hash_data_info[0x30]; /* 0x1A0: MetaDataHashDataInfo */
+    uint8_t _0x1D0[0x30];                  /* 0x1D0: Reserved */
 } nca_fs_header_t;
 
 /* Nintendo content archive header. */
@@ -149,7 +152,8 @@ typedef struct {
     int is_present;
     enum nca_section_type type;
     FILE *file; /* Pointer to file. */
-    uint64_t offset;
+    uint64_t offset;       /* Absolute file position of section start (includes nca file_offset). */
+    uint64_t file_offset_base; /* nca_ctx file_offset — subtracted from offset for CTR counter. */
     uint64_t size;
     uint32_t section_num;
     nca_fs_header_t *header;
@@ -175,6 +179,7 @@ typedef struct {
 
 typedef struct nca_ctx {
     FILE *file; /* File for this NCA. */
+    uint64_t file_offset; /* Byte offset of NCA start within file (0 for standalone NCAs). */
     size_t file_size;
     unsigned char crypto_type;
     int has_rights_id;
@@ -220,5 +225,37 @@ void nca_save_pfs0_section(nca_section_ctx_t *ctx);
 void nca_save_ivfc_section(nca_section_ctx_t *ctx);
 void nca_save_nca0_romfs_section(nca_section_ctx_t *ctx);
 void nca_save_bktr_section(nca_section_ctx_t *ctx);
+
+/* ── SectionExtractor equivalents ──────────────────────────────────────────
+ * All functions below require nca_process() to have been called first.
+ * They operate directly on the decrypted section data via nca_section_fseek /
+ * nca_section_fread — no FILE* juggling or ACTION_ flags needed.
+ * -------------------------------------------------------------------------- */
+
+/* Find the first section of a given type (PFS0, ROMFS, …).
+ * Returns the section index 0–3, or -1 if not found. */
+int nca_find_section(nca_ctx_t *ctx, enum nca_section_type type);
+
+/* Mirror of SectionExtractor.extract_section_pfs0_main_only.
+ * Extracts the "main" binary from the ExeFS (PFS0) section to output_path.
+ * Returns 1 on success, 0 on failure. */
+int nca_extract_pfs0_main(nca_ctx_t *ctx, const char *output_path);
+
+/* Mirror of SectionExtractor.save_section_as_pfs0.
+ * Saves the PFS0 content region (no hash-table prefix) to output_path.
+ * Returns 1 on success, 0 on failure. */
+int nca_save_pfs0_content(nca_ctx_t *ctx, const char *output_path);
+
+/* Mirror of SectionExtractor.save_section_as_romfs.
+ * Saves the RomFS content (IVFC level-5 data only) to output_path.
+ * Returns 1 on success, 0 on failure. */
+int nca_save_romfs_content(nca_ctx_t *ctx, const char *output_path);
+
+/* Mirror of SectionExtractor.extract_section_romfs_packages_only (generalised).
+ * Walks the RomFS section and extracts a single file identified by file_path
+ * (forward-slash separated, e.g. "nx/package2").
+ * Returns a newly allocated buffer the caller must free(), and sets *out_size.
+ * Returns NULL on failure. */
+unsigned char *nca_extract_romfs_file(nca_ctx_t *ctx, const char *file_path, uint64_t *out_size);
 
 #endif

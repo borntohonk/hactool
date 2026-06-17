@@ -124,3 +124,42 @@ void nso0_save(nso0_ctx_t *ctx) {
         fclose(f_uncmp);
     }
 }
+
+void *nso0_decompress_buf(const void *src, size_t src_size, size_t *out_size) {
+    if (src_size < sizeof(nso0_header_t)) return NULL;
+    const nso0_header_t *hdr = (const nso0_header_t *)src;
+    if (hdr->magic != MAGIC_NSO0) return NULL;
+
+    nso0_header_t new_hdr = *hdr;
+    for (unsigned int i = 0; i < 3; i++) {
+        new_hdr.segments[i].file_off = new_hdr.segments[i].dst_off + sizeof(nso0_header_t);
+        new_hdr.compressed_sizes[i]  = new_hdr.segments[i].decomp_size;
+    }
+    new_hdr.segments[0].align_or_total_size = 0x100;
+    new_hdr.segments[1].align_or_total_size = 0;
+    new_hdr.flags &= 0xF8;
+
+    uint64_t total = nso_get_size(&new_hdr);
+    nso0_header_t *out = calloc(1, (size_t)total);
+    if (out == NULL) return NULL;
+    *out = new_hdr;
+
+    for (unsigned int seg = 0; seg < 3; seg++) {
+        const char *seg_src = (const char *)src + hdr->segments[seg].file_off;
+        char       *seg_dst = (char *)out   + new_hdr.segments[seg].file_off;
+        if ((hdr->flags >> seg) & 1) {
+            int ret = LZ4_decompress_safe(seg_src, seg_dst,
+                                          (int)hdr->compressed_sizes[seg],
+                                          (int)new_hdr.segments[seg].decomp_size);
+            if (ret != (int)new_hdr.segments[seg].decomp_size) {
+                free(out);
+                return NULL;
+            }
+        } else {
+            memcpy(seg_dst, seg_src, new_hdr.segments[seg].decomp_size);
+        }
+    }
+
+    if (out_size != NULL) *out_size = (size_t)total;
+    return out;
+}

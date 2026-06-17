@@ -98,12 +98,9 @@ void romfs_process(romfs_ctx_t *ctx) {
         }
     }
 
-    /* If there's ever anything meaningful to print about RomFS, uncomment and implement.
-     *
-     * if (ctx->tool_ctx->action & ACTION_INFO) {
-     *    romfs_print(ctx);
-     * }
-     */
+    if (ctx->tool_ctx->action & ACTION_INFO) {
+        romfs_print(ctx);
+    }
 
     if (ctx->tool_ctx->action & ACTION_EXTRACT) {
         romfs_save(ctx);
@@ -138,6 +135,15 @@ void romfs_save(romfs_ctx_t *ctx) {
 }
 
 void romfs_print(romfs_ctx_t *ctx) {
-    /* Is there anything meaningful to print here? */
-    fprintf(stderr, "Error: RomFS printing not implemented.\n");
+    printf("\nRomFS:\n");
+    printf("    Header Size:                    0x%"PRIx64"\n", ctx->header.header_size);
+    printf("    Dir Hash Table Offset:          0x%"PRIx64"\n", ctx->header.dir_hash_table_offset);
+    printf("    Dir Hash Table Size:            0x%"PRIx64"\n", ctx->header.dir_hash_table_size);
+    printf("    Dir Meta Table Offset:          0x%"PRIx64"\n", ctx->header.dir_meta_table_offset);
+    printf("    Dir Meta Table Size:            0x%"PRIx64"\n", ctx->header.dir_meta_table_size);
+    printf("    File Hash Table Offset:         0x%"PRIx64"\n", ctx->header.file_hash_table_offset);
+    printf("    File Hash Table Size:           0x%"PRIx64"\n", ctx->header.file_hash_table_size);
+    printf("    File Meta Table Offset:         0x%"PRIx64"\n", ctx->header.file_meta_table_offset);
+    printf("    File Meta Table Size:           0x%"PRIx64"\n", ctx->header.file_meta_table_size);
+    printf("    Data Offset:                    0x%"PRIx64"\n", ctx->header.data_offset);
 }

@@ -34,15 +34,31 @@ jobs:
         path-type: inherit
         msystem: MINGW64
         update: true
-        install: mingw-w64-x86_64-gcc mingw-w64-x86_64-make
+        install: mingw-w64-x86_64-gcc mingw-w64-x86_64-make mingw-w64-x86_64-capstone
 
-    - uses: actions/checkout@v1
+    - name: Install capstone (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: sudo apt-get install -y libcapstone-dev
 
-    - run: |
-        mv config.mk.template config.mk
-        make -j$(nproc)
+    - name: Install capstone (macOS)
+      if: matrix.os == 'macos-latest'
+      env:
+        HOMEBREW_NO_REQUIRE_TAP_TRUST: 1
+      run: brew install capstone
 
-    - uses: actions/upload-artifact@v6
+    - uses: actions/checkout@v7
+
+    - run: mv config.mk.template config.mk
+
+    - name: Add capstone paths (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        echo "CFLAGS += -I$(brew --prefix capstone)/include" >> config.mk
+        echo "LDFLAGS += -L$(brew --prefix capstone)/lib" >> config.mk
+
+    - run: make -j$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)
+
+    - uses: actions/upload-artifact@v7
       with:
         name: hactool-${{ matrix.job_name }}
         path: hactool*

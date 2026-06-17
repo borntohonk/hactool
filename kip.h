@@ -59,6 +59,18 @@ void kip1_process(kip1_ctx_t *ctx);
 void kip1_print(kip1_ctx_t *ctx, int suppress);
 void kip1_save(kip1_ctx_t *ctx);
 
+/* Decompress a raw KIP1 buffer in memory (BLZ decompression).
+ * Returns a newly malloc'd decompressed KIP1 (caller must free), sets *out_size.
+ * Returns NULL if src is not a valid KIP1. */
+void *kip1_decompress_buf(const void *src, size_t src_size, size_t *out_size);
+
+/* Re-compress a decompressed KIP1 (flags bits 0-2 all clear) using BLZ.
+ * Each section is compressed if it shrinks; otherwise left uncompressed.
+ * Returns a newly malloc'd re-compressed KIP1 (caller must free), sets *out_size.
+ * SHA256 of the result is the canonical module ID when only a decompressed KIP1
+ * is available (matches sgg convention). Returns NULL on failure. */
+void *kip1_recompress_buf(const void *src, size_t src_size, size_t *out_size);
+
 static inline uint64_t kip1_get_size(kip1_ctx_t *ctx) {
     /* Header + .text + .rodata + .rwdata */
     return 0x100 + ctx->header->section_headers[0].compressed_size + ctx->header->section_headers[1].compressed_size + ctx->header->section_headers[2].compressed_size;

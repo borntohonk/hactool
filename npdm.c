@@ -62,10 +62,10 @@ static const char * const svc_names[0xC0] = {
     "svcWaitForAddress",
     "svcSignalToAddress",
     "svcSynchronizePreemptionState",
+    "svcGetResourceLimitPeakValue",
     "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
+    "svcCreateIoPool",
+    "svcCreateIoRegion",
     "svcUnknown",
     "svcKernelDebug",
     "svcChangeKernelTraceState",
@@ -77,8 +77,8 @@ static const char * const svc_names[0xC0] = {
     "svcReplyAndReceive",
     "svcReplyAndReceiveWithUserBuffer",
     "svcCreateEvent",
-    "svcUnknown",
-    "svcUnknown",
+    "svcMapIoRegion",
+    "svcUnmapIoRegion",
     "svcMapPhysicalMemoryUnsafe",
     "svcUnmapPhysicalMemoryUnsafe",
     "svcSetUnsafeLimit",
@@ -92,7 +92,7 @@ static const char * const svc_names[0xC0] = {
     "svcUnmapTransferMemory",
     "svcCreateInterruptEvent",
     "svcQueryPhysicalAddress",
-    "svcQueryIoMapping",
+    "svcQueryMemoryMapping",
     "svcCreateDeviceAddressSpace",
     "svcAttachDeviceAddressSpace",
     "svcDetachDeviceAddressSpace",
@@ -134,71 +134,71 @@ static const char * const svc_names[0xC0] = {
     "svcGetProcessInfo",
     "svcCreateResourceLimit",
     "svcSetResourceLimitLimitValue",
-    "svcCallSecureMonitor"
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
-    "svcUnknown",
+    "svcCallSecureMonitor",         /* 0x7F */
+    "svcSetMemoryAttribute2",        /* 0x80 */
+    "svcUnknown",                    /* 0x81 */
+    "svcUnknown",                    /* 0x82 */
+    "svcUnknown",                    /* 0x83 */
+    "svcUnknown",                    /* 0x84 */
+    "svcUnknown",                    /* 0x85 */
+    "svcUnknown",                    /* 0x86 */
+    "svcUnknown",                    /* 0x87 */
+    "svcUnknown",                    /* 0x88 */
+    "svcUnknown",                    /* 0x89 */
+    "svcUnknown",                    /* 0x8A */
+    "svcUnknown",                    /* 0x8B */
+    "svcUnknown",                    /* 0x8C */
+    "svcUnknown",                    /* 0x8D */
+    "svcUnknown",                    /* 0x8E */
+    "svcUnknown",                    /* 0x8F */
+    "svcMapInsecurePhysicalMemory",  /* 0x90 */
+    "svcUnmapInsecurePhysicalMemory", /* 0x91 */
+    "svcUnknown",                    /* 0x92 */
+    "svcUnknown",                    /* 0x93 */
+    "svcUnknown",                    /* 0x94 */
+    "svcUnknown",                    /* 0x95 */
+    "svcUnknown",                    /* 0x96 */
+    "svcUnknown",                    /* 0x97 */
+    "svcUnknown",                    /* 0x98 */
+    "svcUnknown",                    /* 0x99 */
+    "svcUnknown",                    /* 0x9A */
+    "svcUnknown",                    /* 0x9B */
+    "svcUnknown",                    /* 0x9C */
+    "svcUnknown",                    /* 0x9D */
+    "svcUnknown",                    /* 0x9E */
+    "svcUnknown",                    /* 0x9F */
+    "svcUnknown",                    /* 0xA0 */
+    "svcUnknown",                    /* 0xA1 */
+    "svcUnknown",                    /* 0xA2 */
+    "svcUnknown",                    /* 0xA3 */
+    "svcUnknown",                    /* 0xA4 */
+    "svcUnknown",                    /* 0xA5 */
+    "svcUnknown",                    /* 0xA6 */
+    "svcUnknown",                    /* 0xA7 */
+    "svcUnknown",                    /* 0xA8 */
+    "svcUnknown",                    /* 0xA9 */
+    "svcUnknown",                    /* 0xAA */
+    "svcUnknown",                    /* 0xAB */
+    "svcUnknown",                    /* 0xAC */
+    "svcUnknown",                    /* 0xAD */
+    "svcUnknown",                    /* 0xAE */
+    "svcUnknown",                    /* 0xAF */
+    "svcUnknown",                    /* 0xB0 */
+    "svcUnknown",                    /* 0xB1 */
+    "svcUnknown",                    /* 0xB2 */
+    "svcUnknown",                    /* 0xB3 */
+    "svcUnknown",                    /* 0xB4 */
+    "svcUnknown",                    /* 0xB5 */
+    "svcUnknown",                    /* 0xB6 */
+    "svcUnknown",                    /* 0xB7 */
+    "svcUnknown",                    /* 0xB8 */
+    "svcUnknown",                    /* 0xB9 */
+    "svcUnknown",                    /* 0xBA */
+    "svcUnknown",                    /* 0xBB */
+    "svcUnknown",                    /* 0xBC */
+    "svcUnknown",                    /* 0xBD */
+    "svcUnknown",                    /* 0xBE */
+    "svcUnknown",                    /* 0xBF */
 };
 
 #define MAX_FS_PERM_RW 0x27
@@ -398,6 +398,13 @@ void kac_print(const uint32_t *descriptors, uint32_t num_descriptors) {
                 kac_add_mmio(&kac, page_mmio);
                 page_mmio = NULL;
                 break;
+            case 10: /* Memory Region Map [8.0.0+]. */
+                kac.has_memory_regions = 1;
+                for (unsigned int ridx = 0; ridx < 3; ridx++) {
+                    kac.memory_regions[ridx].region_type = (desc >> (7 * ridx)) & 0x3F;
+                    kac.memory_regions[ridx].is_ro = (desc >> (7 * ridx + 6)) & 1;
+                }
+                break;
             case 11: /* IRQ Pair. */
                 cur_irq = calloc(1, sizeof(kac_irq_t));
                 if (cur_irq == NULL) {
@@ -432,7 +439,8 @@ void kac_print(const uint32_t *descriptors, uint32_t num_descriptors) {
             case 16: /* Debug Flags. */
                 kac.has_debug_flags = 1;
                 kac.allow_debug = desc & 1;
-                kac.force_debug = (desc >> 1) & 1;
+                kac.force_debug_prod = (desc >> 1) & 1;
+                kac.force_debug = (desc >> 2) & 1;
                 break;
         }
     }
@@ -509,7 +517,26 @@ void kac_print(const uint32_t *descriptors, uint32_t num_descriptors) {
 
     if (kac.has_debug_flags) {
         printf("        Allow Debug:                %s\n", kac.allow_debug ? "YES" : "NO");
+        printf("        Force Debug (Prod):         %s\n", kac.force_debug_prod ? "YES" : "NO");
         printf("        Force Debug:                %s\n", kac.force_debug ? "YES" : "NO");
+    }
+
+    if (kac.has_memory_regions) {
+        static const char * const region_names[] = {
+            "NoMapping", "KernelTraceBuffer", "OnMemoryBootImage", "DTB"
+        };
+        int printed_header = 0;
+        for (unsigned int ridx = 0; ridx < 3; ridx++) {
+            int rtype = kac.memory_regions[ridx].region_type;
+            if (rtype == 0) continue;
+            if (!printed_header) {
+                printf("        Memory Regions:\n");
+                printed_header = 1;
+            }
+            const char *rname = (unsigned int)rtype < 4 ? region_names[rtype] : "Unknown";
+            printf("                                    Region %u: %s (%s)\n",
+                   ridx, rname, kac.memory_regions[ridx].is_ro ? "RO" : "RW");
+        }
     }
 }
 
@@ -668,16 +695,31 @@ void npdm_process(npdm_t *npdm, hactool_ctx_t *tool_ctx) {
 void npdm_print(npdm_t *npdm, hactool_ctx_t *tool_ctx) {
     printf("NPDM:\n");
     print_magic("    Magic:                          ", npdm->magic);
-    printf("    MMU Flags:                      %"PRIx8"\n", npdm->mmu_flags);
+    printf("    MMU Flags:                      0x%02"PRIx8"\n", npdm->mmu_flags);
+    printf("        Is 64-bit:                  %s\n",        (npdm->mmu_flags & 0x01) ? "YES" : "NO");
+    printf("        Address Space Type:         %"PRIu8"\n",  (npdm->mmu_flags >> 1) & 0x07);
+    printf("        Optimize Memory Alloc:      %s\n",        ((npdm->mmu_flags >> 4) & 0x01) ? "YES" : "NO");
+    printf("        Disable DevAddr Spc Merge:  %s\n",        ((npdm->mmu_flags >> 5) & 0x01) ? "YES" : "NO");
+    printf("        Enable Alias Region Extra:  %s\n",        ((npdm->mmu_flags >> 6) & 0x01) ? "YES" : "NO");
+    printf("        Prevent Code Reads:         %s\n",        ((npdm->mmu_flags >> 7) & 0x01) ? "YES" : "NO");
     printf("    Main Thread Priority:           %"PRId8"\n", npdm->main_thread_prio);
     printf("    Default CPU ID:                 %"PRIx8"\n", npdm->default_cpuid);
     printf("    Version:                        %"PRIu32".%"PRIu32".%"PRIu32"-%"PRIu32" (%"PRIu32")\n", (npdm->version >> 26) & 0x3F, (npdm->version >> 20) & 0x3F, (npdm->version >> 16) & 0xF, (npdm->version >> 0) & 0xFFFF, npdm->version);
     printf("    Main Thread Stack Size:         0x%"PRIx32"\n", npdm->main_stack_size);
-    printf("    Title Name:                     %s\n", npdm->title_name);
+    if (npdm->system_resource_size != 0) {
+        printf("    System Resource Size:           0x%"PRIx32"\n", npdm->system_resource_size);
+    }
+    printf("    Title Name:                     %.16s\n", npdm->title_name);
+    if (npdm->product_code[0] != '\0') {
+        printf("    Product Code:                   %.16s\n", npdm->product_code);
+    }
+    printf("    Signature Key Generation:       %"PRIu32"\n", npdm->acid_sign_key_index);
     npdm_acid_t *acid = npdm_get_acid(npdm);
     npdm_aci0_t *aci0 = npdm_get_aci0(npdm);
     printf("    ACID:\n");
     print_magic("        Magic:                      ", acid->magic);
+    printf("        Version:                    %"PRIu8"\n", (uint8_t)(acid->_0x208 & 0xFF));
+    printf("        Size:                       0x%"PRIx32"\n", acid->size);
     if (tool_ctx->action & ACTION_VERIFY) {
         if (npdm->acid_sign_key_index < sizeof(tool_ctx->settings.keyset.acid_fixed_key_moduli) / sizeof(tool_ctx->settings.keyset.acid_fixed_key_moduli[0])) {
             printf("        Signature Key (GOOD):       %"PRIu32"\n", npdm->acid_sign_key_index);
@@ -697,7 +739,9 @@ void npdm_print(npdm_t *npdm, hactool_ctx_t *tool_ctx) {
     }
     memdump(stdout, "        Header Modulus:             ", &acid->modulus, 0x100);
     printf("        Is Retail:                  %"PRId32"\n", acid->flags & 1);
-    printf("        Pool Partition:             %"PRId32"\n", (acid->flags >> 2) & 3);
+    printf("        Unqualified Approval:       %"PRId32"\n", (acid->flags >> 1) & 1);
+    printf("        Pool Partition:             %"PRId32"\n", (acid->flags >> 2) & 0xF);
+    printf("        Load Browser Core DLL:      %"PRId32"\n", (acid->flags >> 7) & 1);
     printf("        Title ID Range:             %016"PRIx64"-%016"PRIx64"\n", acid->title_id_range_min, acid->title_id_range_max);
     printf("    ACI0:\n");
     print_magic("        Magic:                      ", aci0->magic);
@@ -903,6 +947,27 @@ cJSON *kac_get_json(const uint32_t *descriptors, uint32_t num_descriptors) {
             case 7: /* Map Normal Page. */
                 cJSON_AddU32ToKacArray(kac_json, "map_page", desc << 12);
                 break;
+            case 10: /* Memory Region Map [8.0.0+]. */
+            {
+                static const char * const region_names[] = {
+                    "NoMapping", "KernelTraceBuffer", "OnMemoryBootImage", "DTB"
+                };
+                temp = cJSON_CreateArray();
+                for (unsigned int ridx = 0; ridx < 3; ridx++) {
+                    int rtype = (desc >> (7 * ridx)) & 0x3F;
+                    int is_ro = (desc >> (7 * ridx + 6)) & 1;
+                    if (rtype == 0) continue;
+                    cJSON *region_obj = cJSON_CreateObject();
+                    cJSON_AddNumberToObject(region_obj, "region_index", ridx);
+                    cJSON_AddStringToObject(region_obj, "region_type",
+                        (unsigned int)rtype < 4 ? region_names[rtype] : "Unknown");
+                    cJSON_AddBoolToObject(region_obj, "is_ro", is_ro);
+                    cJSON_AddItemToArray(temp, region_obj);
+                }
+                cJSON_AddItemToArray(kac_json, kac_create_obj("memory_regions", temp));
+                temp = NULL;
+                break;
+            }
             case 11: /* IRQ Pair. */
                 temp = cJSON_CreateArray();
                 if ((desc & 0x3FF) == 0x3FF) {
@@ -930,12 +995,9 @@ cJSON *kac_get_json(const uint32_t *descriptors, uint32_t num_descriptors) {
             case 16: /* Debug Flags. */
                 temp = cJSON_CreateObject();
                 cJSON_AddBoolToObject(temp, "allow_debug", (desc >> 0) & 1);
-                cJSON_AddBoolToObject(temp, "force_debug", (desc >> 1) & 1);
+                cJSON_AddBoolToObject(temp, "force_debug_prod", (desc >> 1) & 1);
+                cJSON_AddBoolToObject(temp, "force_debug", (desc >> 2) & 1);
                 cJSON_AddItemToArray(kac_json, kac_create_obj("debug_flags", temp));
-
-               // kac.has_debug_flags = 1;
-               // kac.allow_debug = desc & 1;
-               // kac.force_debug = (desc >> 1) & 1;
                 break;
         }
         temp = NULL;
@@ -960,10 +1022,15 @@ char *npdm_get_json(npdm_t *npdm) {
     cJSON_AddNumberToObject(npdm_json, "main_thread_priority", npdm->main_thread_prio);
     cJSON_AddNumberToObject(npdm_json, "default_cpu_id", npdm->default_cpuid);
     cJSON_AddU32ToObject(npdm_json, "version", npdm->version);
+    cJSON_AddU32ToObject(npdm_json, "system_resource_size", npdm->system_resource_size);
     cJSON_AddBoolToObject(npdm_json, "is_retail", acid->flags & 1);
-    cJSON_AddNumberToObject(npdm_json, "pool_partition", (acid->flags >> 2) & 3);
+    cJSON_AddNumberToObject(npdm_json, "pool_partition", (acid->flags >> 2) & 0xF);
     cJSON_AddBoolToObject(npdm_json, "is_64_bit", npdm->mmu_flags & 1);
     cJSON_AddNumberToObject(npdm_json, "address_space_type", (npdm->mmu_flags >> 1) & 7);
+    cJSON_AddBoolToObject(npdm_json, "optimize_memory_allocation", (npdm->mmu_flags >> 4) & 1);
+    cJSON_AddBoolToObject(npdm_json, "disable_device_address_space_merge", (npdm->mmu_flags >> 5) & 1);
+    cJSON_AddBoolToObject(npdm_json, "enable_alias_region_extra_size", (npdm->mmu_flags >> 6) & 1);
+    cJSON_AddBoolToObject(npdm_json, "prevent_code_reads", (npdm->mmu_flags >> 7) & 1);
 
     /* Add FAC. */
     fac_t *fac = (fac_t *)((char *)acid + acid->fac_offset);

@@ -99,6 +99,24 @@ If your `make` is not GNU make (e.g. on BSD variants), you need to call `gmake` 
 
 If on Windows, I recommend using MinGW.
 
+
+requires capstone.
+
+on mingw64 the package required is:
+mingw-w64-x86_64-capstone
+
+on ubuntu:
+apt-get install libcapstone-dev
+
+on arch linux:
+pacman -S capstone
+
+on macos:
+brew install capstone
+
+on fedora:
+sudo dnf install capstone capstone-devel
+
 ## External Keys
 
 External keys can be provided by the -k/--keyset argument to the a keyset filename.

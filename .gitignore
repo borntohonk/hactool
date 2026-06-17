@@ -8,3 +8,7 @@
 /test/*
 /temp
 .vscode/
+/sgg
+/sgg/*
+.claude/
+.claude/*

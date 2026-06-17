@@ -229,4 +229,29 @@ void pk21_process(pk21_ctx_t *ctx);
 void pk21_print(pk21_ctx_t *ctx);
 void pk21_save(pk21_ctx_t *ctx);
 
+/* ── Buffer-based Package2 processing ──────────────────────────────────────
+ * Mirror of extract_packages.process_filesystem_package_object().
+ * Works entirely from a memory buffer — no FILE* or tmpfile() required.
+ * Equivalent of:
+ *   try_decrypt_package2 + decrypt_and_extract_package2 +
+ *   extract_kips_from_ini1_as_objects
+ *
+ * pk21_kip_callback_t is called once per KIP1 found in INI1.
+ *   kip_name : null-terminated name (from kip1_header_t.name, 12 bytes)
+ *   kip_data : pointer to the raw (compressed) KIP1 bytes within the buffer
+ *   kip_size : total size (0x100 header + compressed sections)
+ *   userdata : opaque pointer forwarded from pk21_process_buffer
+ *
+ * Returns 1 on success, 0 on failure (bad magic, no valid key, …). */
+typedef void (*pk21_kip_callback_t)(const char        *kip_name,
+                                    const unsigned char *kip_data,
+                                    uint64_t             kip_size,
+                                    void                *userdata);
+
+int pk21_process_buffer(const unsigned char *pkg2_data,
+                        size_t               pkg2_size,
+                        hactool_ctx_t       *tool_ctx,
+                        pk21_kip_callback_t  callback,
+                        void                *userdata);
+
 #endif

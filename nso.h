@@ -40,6 +40,11 @@ void nso0_process(nso0_ctx_t *ctx);
 void nso0_print(nso0_ctx_t *ctx);
 void nso0_save(nso0_ctx_t *ctx);
 
+/* Decompress a raw NSO0 buffer in memory.
+ * Returns a newly malloc'd decompressed NSO0 (caller must free), sets *out_size.
+ * Returns NULL if src is not a valid NSO0 or decompression fails. */
+void *nso0_decompress_buf(const void *src, size_t src_size, size_t *out_size);
+
 static inline uint64_t nso_get_section_size(nso0_header_t *header, unsigned int segment) {
     int is_compressed = (header->flags >> segment) & 1;
     return is_compressed ? header->compressed_sizes[segment] : header->segments[segment].decomp_size;

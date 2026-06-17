@@ -42,6 +42,12 @@ typedef struct {
     int has_debug_flags;
     int allow_debug;
     int force_debug;
+    int force_debug_prod;
+    int has_memory_regions;
+    struct {
+        int region_type;  /* 0=NoMapping 1=KernelTraceBuffer 2=OnMemoryBootImage 3=DTB */
+        int is_ro;
+    } memory_regions[3];
 } kac_t;
 
 typedef struct sac_entry {
@@ -115,10 +121,13 @@ typedef struct {
     uint8_t _0xD;
     uint8_t main_thread_prio;
     uint8_t default_cpuid;
-    uint64_t _0x10;
+    uint32_t _0x10;
+    uint32_t system_resource_size;
     uint32_t version;
     uint32_t main_stack_size;
-    char title_name[0x50];
+    char title_name[0x10];
+    char product_code[0x10];
+    uint8_t _0x40[0x30];
     uint32_t aci0_offset;
     uint32_t aci0_size;
     uint32_t acid_offset;
