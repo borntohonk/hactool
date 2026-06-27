@@ -50,6 +50,10 @@ jobs:
 
     - run: mv config.mk.template config.mk
 
+    - name: Static link capstone (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: sed -i 's/-lcapstone/-Wl,-Bstatic -lcapstone -Wl,-Bdynamic/' config.mk
+
     - name: Add capstone paths (macOS)
       if: matrix.os == 'macos-latest'
       run: |
