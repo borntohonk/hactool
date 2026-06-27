@@ -19,6 +19,7 @@ typedef struct {
     unsigned char secure_boot_key[0x10];                     /* Secure boot key for use in key derivation. NOTE: CONSOLE UNIQUE. */
     unsigned char tsec_key[0x10];                            /* TSEC key for use in key derivation. NOTE: CONSOLE UNIQUE. */
     unsigned char hovi_kek[0x10];                            /* TSEC secret 26, used for deriving HOVI KEKs. Derived from TSEC firmware. */
+    unsigned char tsec_secret_06[0x10];                      /* TSEC secret 06 (falcon_decryption_key), used to decrypt secure_boot_encrypted. */
     unsigned char device_key[0x10];                          /* Device key used to derive some FS keys. NOTE: CONSOLE UNIQUE. */
     unsigned char keyblob_keys[0x20][0x10];                  /* Actual keys used to decrypt keyblobs. NOTE: CONSOLE UNIQUE.*/
     unsigned char keyblob_mac_keys[0x20][0x10];              /* Keys used to validate keyblobs. NOTE: CONSOLE UNIQUE. */

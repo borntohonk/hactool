@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include "packages.h"
 #include "pk11_extract_key_sources.h"
+#include "tsec_fw.h"
+#include "key_sources.h"
 #include "aes.h"
 #include "rsa.h"
 #include "sha.h"
@@ -236,6 +238,58 @@ void pk11_save(pk11_ctx_t *ctx) {
     if (dirpath != NULL && dirpath->valid == VALIDITY_VALID && ctx->is_decrypted) {
         os_makedir(dirpath->os_path);
 
+        /* Decrypt TSEC firmware sections in-place within stage1 before saving */
+        tsec_fw_section_t tsec_sections[TSEC_FW_MAX_SECTIONS];
+        int tsec_count = 0;
+        int tsec_ok = -1;
+
+        if (!ctx->is_mariko) {
+            uint8_t *stage1_data = ctx->stage1.modern.stage1;
+            size_t   stage1_data_size = ctx->is_modern ? sizeof(ctx->stage1.modern.stage1)
+                                                        : sizeof(ctx->stage1.legacy.stage1);
+
+            tsec_ok = tsec_fw_split_sections(stage1_data, stage1_data_size,
+                                             tsec_sections, &tsec_count);
+            if (tsec_ok == 0) {
+                /* Derive code_enc_key from hovi_kek if available */
+                uint8_t code_enc_key[0x10] = {0};
+                int has_code_enc_key = 0;
+                {
+                    const uint8_t *hovi_kek = ctx->tool_ctx->settings.keyset.hovi_kek;
+                    uint8_t zero16[0x10] = {0};
+                    if (memcmp(hovi_kek, zero16, 0x10) != 0) {
+                        tsec_fw_derive_code_enc_key(hovi_kek, code_enc_key);
+                        has_code_enc_key = 1;
+                    }
+                }
+
+                /* Resolve falcon_decryption_key (tsec_secret_06): keyset first, then embedded */
+                const uint8_t *falcon_key = ctx->tool_ctx->settings.keyset.tsec_secret_06;
+                {
+                    uint8_t zero16[0x10] = {0};
+                    if (memcmp(falcon_key, zero16, 0x10) == 0)
+                        falcon_key = embedded_tsec_secret_06;
+                }
+
+                for (int i = 0; i < tsec_count; i++) {
+                    uint8_t *sec      = stage1_data + tsec_sections[i].start;
+                    size_t   sec_size = tsec_sections[i].end - tsec_sections[i].start;
+
+                    if (strcmp(tsec_sections[i].name, "keygen") == 0) {
+                        if (!has_code_enc_key) {
+                            fprintf(stderr, "Warning: hovi_kek not set; keygen section left encrypted\n");
+                        } else if (tsec_fw_decrypt_keygen(sec, sec_size, code_enc_key) != 0) {
+                            fprintf(stderr, "Warning: keygen decryption failed\n");
+                        }
+                    } else if (strcmp(tsec_sections[i].name, "secure_boot") == 0) {
+                        if (tsec_fw_decrypt_secure_boot(sec, sec_size, falcon_key) != 0) {
+                            fprintf(stderr, "Warning: secure_boot decryption failed\n");
+                        }
+                    }
+                }
+            }
+        }
+
         /* Save Decrypted.bin */
         printf("Saving decrypted binary to %s/Decrypted.bin\n", dirpath->char_path);
         if (ctx->is_mariko) {
@@ -306,6 +360,19 @@ void pk11_save(pk11_ctx_t *ctx) {
         /* Save Secure_Monitor.bin */
         printf("Saving Secure_Monitor.bin to %s/Secure_Monitor.bin...\n", dirpath->char_path);
         save_buffer_to_directory_file(pk11_get_secmon(ctx), pk11_get_secmon_size(ctx), dirpath, "Secure_Monitor.bin");
+
+        /* Save TSEC firmware sections (already decrypted in-place above) */
+        if (tsec_ok == 0) {
+            uint8_t *stage1_data = ctx->stage1.modern.stage1;
+            char filename[64];
+            for (int i = 0; i < tsec_count; i++) {
+                uint8_t *sec      = stage1_data + tsec_sections[i].start;
+                size_t   sec_size = tsec_sections[i].end - tsec_sections[i].start;
+                snprintf(filename, sizeof(filename), "TSEC_%s.bin", tsec_sections[i].name);
+                printf("Saving %s to %s/%s...\n", filename, dirpath->char_path, filename);
+                save_buffer_to_directory_file(sec, (uint64_t)sec_size, dirpath, filename);
+            }
+        }
     }
 }
 

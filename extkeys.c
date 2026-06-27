@@ -302,6 +302,9 @@ void extkeys_initialize_settings(hactool_settings_t *settings, FILE *f) {
             } else if (strcmp(key, "hovi_kek") == 0 || strcmp(key, "tsec_secret_26") == 0) {
                 parse_hex_key(keyset->hovi_kek, value, sizeof(keyset->hovi_kek));
                 matched_key = 1;
+            } else if (strcmp(key, "tsec_secret_06") == 0) {
+                parse_hex_key(keyset->tsec_secret_06, value, sizeof(keyset->tsec_secret_06));
+                matched_key = 1;
             } else if (strcmp(key, "header_kek") == 0) {
                 parse_hex_key(keyset->header_kek, value, sizeof(keyset->header_kek));
                 matched_key = 1;

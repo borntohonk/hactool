@@ -13,7 +13,7 @@ all:
 .c.o:
 	$(CC) $(INCLUDE) -c $(CFLAGS) -o $@ $<
 
-hactool$(EXEEXT): save.o sha.o aes.o extkeys.o rsa.o npdm.o nacp.o cnmt.o nsp.o bktr.o kip.o packages.o pki.o pk11_extract_key_sources.o pfs0.o hfs0.o nca0_romfs.o romfs.o utils.o nax0.o nso.o lz4.o nca.o xci.o switchfs.o swipc.o find_patterns.o main.o filepath.o ConvertUTF.o cJSON.o
+hactool$(EXEEXT): save.o sha.o aes.o extkeys.o rsa.o npdm.o nacp.o cnmt.o nsp.o bktr.o kip.o packages.o pki.o pk11_extract_key_sources.o tsec_fw.o pfs0.o hfs0.o nca0_romfs.o romfs.o utils.o nax0.o nso.o lz4.o nca.o xci.o switchfs.o swipc.o find_patterns.o main.o filepath.o ConvertUTF.o cJSON.o
 	$(CC) -o $@ $^ -L $(LIBDIR) $(LDFLAGS)
 
 aes.o: aes.h types.h
@@ -34,9 +34,11 @@ find_patterns.o: find_patterns.h settings.h types.h cJSON.h sha.h kip.h
 
 main.o: main.c pki.h types.h settings.h find_patterns.h
 
-packages.o: packages.h aes.h kip.h types.h
+packages.o: packages.h aes.h kip.h types.h tsec_fw.h key_sources.h
 
-pk11_extract_key_sources.o: pk11_extract_key_sources.h 
+pk11_extract_key_sources.o: pk11_extract_key_sources.h
+
+tsec_fw.o: tsec_fw.h aes.h types.h
 
 pfs0.o: pfs0.h types.h
 
