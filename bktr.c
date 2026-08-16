@@ -117,7 +117,9 @@ bktr_relocation_bucket_t *bktr_get_relocation_bucket(bktr_relocation_block_t *bl
     }
     
     if (i >= block->num_buckets) {
-        fprintf(stderr, "BKTR relocation bucket index %u out of range (max %u)\n", i, block->num_buckets - 1);
+        /* Note: do not report "max = num_buckets - 1"; num_buckets is unsigned and
+         * this check is reached precisely when the block is empty, where it underflows. */
+        fprintf(stderr, "BKTR relocation bucket index %u out of range (block has %u bucket(s))\n", i, block->num_buckets);
         return NULL;
     }
     
@@ -199,7 +201,7 @@ bktr_relocation_entry_t *bktr_get_relocation(bktr_relocation_block_t *block, uin
     }
     
     if (bucket_num >= block->num_buckets) {
-        fprintf(stderr, "Bucket number %u invalid (max: %u)\n", bucket_num, block->num_buckets - 1);
+        fprintf(stderr, "BKTR relocation bucket number %u invalid (block has %u bucket(s))\n", bucket_num, block->num_buckets);
         return NULL;
     }
     
@@ -244,7 +246,9 @@ bktr_subsection_bucket_t *bktr_get_subsection_bucket(bktr_subsection_block_t *bl
     }
     
     if (i >= block->num_buckets) {
-        fprintf(stderr, "BKTR subsection bucket index %u out of range (max %u)\n", i, block->num_buckets - 1);
+        /* Note: do not report "max = num_buckets - 1"; num_buckets is unsigned and
+         * this check is reached precisely when the block is empty, where it underflows. */
+        fprintf(stderr, "BKTR subsection bucket index %u out of range (block has %u bucket(s))\n", i, block->num_buckets);
         return NULL;
     }
     
@@ -332,7 +336,7 @@ bktr_subsection_entry_t *bktr_get_subsection(bktr_subsection_block_t *block, uin
     }
     
     if (bucket_num >= block->num_buckets) {
-        fprintf(stderr, "Bucket number %u invalid (max: %u)\n", bucket_num, block->num_buckets - 1);
+        fprintf(stderr, "BKTR subsection bucket number %u invalid (block has %u bucket(s))\n", bucket_num, block->num_buckets);
         return NULL;
     }
     

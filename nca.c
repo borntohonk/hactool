@@ -1206,6 +1206,28 @@ void nca_process_bktr_section(nca_section_ctx_t *ctx) {
             return;
         }
 
+        /* Every "num_buckets - 1" below is unsigned; an empty block would wrap to
+         * UINT32_MAX and walk off the end of the allocation. Also cap against the
+         * number of bucket offsets the root node can hold, which is what the
+         * calloc() calls above reserve slack for. */
+        const uint32_t max_buckets = 0x3FF0 / sizeof(uint64_t);
+        if (ctx->bktr_ctx.relocation_block->num_buckets == 0
+            || ctx->bktr_ctx.relocation_block->num_buckets > max_buckets
+            || ctx->bktr_ctx.subsection_block->num_buckets == 0
+            || ctx->bktr_ctx.subsection_block->num_buckets > max_buckets) {
+            fprintf(stderr, "BKTR bucket count validation FAILED!\n");
+            fprintf(stderr, "  relocation num_buckets(%"PRIu32"), subsection num_buckets(%"PRIu32"), max(%"PRIu32")\n",
+                    ctx->bktr_ctx.relocation_block->num_buckets,
+                    ctx->bktr_ctx.subsection_block->num_buckets,
+                    max_buckets);
+            free(relocs);
+            free(subs);
+            ctx->bktr_ctx.relocation_block = NULL;
+            ctx->bktr_ctx.subsection_block = NULL;
+            ctx->superblock_hash_validity = VALIDITY_INVALID;
+            return;
+        }
+
         /* This simplifies logic greatly... */
         for (unsigned int i = ctx->bktr_ctx.relocation_block->num_buckets - 1; i > 0; i--) {
             memcpy(bktr_get_relocation_bucket(ctx->bktr_ctx.relocation_block, i), &ctx->bktr_ctx.relocation_block->buckets[i], sizeof(bktr_relocation_bucket_t));
