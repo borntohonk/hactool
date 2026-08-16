@@ -294,16 +294,17 @@ static void embed_sources(nca_keyset_t *keyset) {
         memcpy(keyset->tsec_auth_signatures[2], tsec_auth_signatures[2], 0x10);
     }
 
+    /* Erista sources are indexed starting at master key revision 0x08. */
+    _Static_assert(0x08 + ARRAY_SIZE(erista_master_kek_sources) <= 0x20,
+                   "erista_master_kek_sources does not fit in nca_keyset_t::master_kek_sources");
     if (memcmp(keyset->master_kek_sources[0x08], zeroes, 0x10) == 0) {
-        for (int i = 0; i < 14; i++) {
-            memcpy(keyset->master_kek_sources[0x08 + i], erista_master_kek_sources[i], 0x10);
-        }
+        memcpy(keyset->master_kek_sources + 0x08, erista_master_kek_sources, sizeof(erista_master_kek_sources));
     }
 
+    _Static_assert(ARRAY_SIZE(mariko_master_kek_sources) <= 0x20,
+                   "mariko_master_kek_sources does not fit in nca_keyset_t::mariko_master_kek_sources");
     if (memcmp(keyset->mariko_master_kek_sources[0], zeroes, 0x10) == 0) {
-        for (int i = 0; i < 22; i++) {
-            memcpy(keyset->mariko_master_kek_sources[i], mariko_master_kek_sources[i], 0x10);
-        }
+        memcpy(keyset->mariko_master_kek_sources, mariko_master_kek_sources, sizeof(mariko_master_kek_sources));
     }
 
     extern const unsigned char mariko_kek[0x10];

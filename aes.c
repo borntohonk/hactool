@@ -16,13 +16,13 @@ aes_ctx_t *new_aes_ctx(const void *key, unsigned int key_size, aes_mode_t mode) 
     mbedtls_cipher_init(&ctx->cipher_dec);
     mbedtls_cipher_init(&ctx->cipher_enc);
 
-    if (mbedtls_cipher_setup(&ctx->cipher_dec, mbedtls_cipher_info_from_type(mode))
-        || mbedtls_cipher_setup(&ctx->cipher_enc, mbedtls_cipher_info_from_type(mode))) {
+    if (mbedtls_cipher_setup(&ctx->cipher_dec, mbedtls_cipher_info_from_type((mbedtls_cipher_type_t)mode))
+        || mbedtls_cipher_setup(&ctx->cipher_enc, mbedtls_cipher_info_from_type((mbedtls_cipher_type_t)mode))) {
         FATAL_ERROR("Failed to set up AES context!");
     }
 
-    if (mbedtls_cipher_setkey(&ctx->cipher_dec, key, key_size * 8, AES_DECRYPT)
-        || mbedtls_cipher_setkey(&ctx->cipher_enc, key, key_size * 8, AES_ENCRYPT)) {
+    if (mbedtls_cipher_setkey(&ctx->cipher_dec, key, key_size * 8, (mbedtls_operation_t)AES_DECRYPT)
+        || mbedtls_cipher_setkey(&ctx->cipher_enc, key, key_size * 8, (mbedtls_operation_t)AES_ENCRYPT)) {
         FATAL_ERROR("Failed to set key for AES context!");
     }
 
