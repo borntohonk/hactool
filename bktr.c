@@ -106,6 +106,13 @@ int bktr_node_header_verify(const bktr_node_header_t *header,
 
 /**
  * Get a relocation bucket from the relocation block.
+ *
+ * Buckets are stored packed (one 0x4000 node after another) on disk, but are
+ * respread in memory by nca_process_bktr_section() with a gap of one entry
+ * after each bucket. That gap holds the sentinel entry written at
+ * entries[num_entries], which would otherwise overrun a full bucket. The
+ * stride below must therefore stay sizeof(bucket) + sizeof(entry), matching
+ * the slack reserved by the calloc() in nca_process_bktr_section().
  * 
  * @param block: Relocation block root
  * @param i: Bucket index (0-based)
@@ -123,7 +130,7 @@ bktr_relocation_bucket_t *bktr_get_relocation_bucket(bktr_relocation_block_t *bl
         return NULL;
     }
     
-    return (bktr_relocation_bucket_t *)((uint8_t *)block->buckets + (sizeof(bktr_relocation_bucket_t) * i));
+    return (bktr_relocation_bucket_t *)((uint8_t *)block->buckets + (sizeof(bktr_relocation_bucket_t) + sizeof(bktr_relocation_entry_t)) * i);
 }
 
 /* ================================ */
@@ -235,6 +242,10 @@ bktr_relocation_entry_t *bktr_get_relocation(bktr_relocation_block_t *block, uin
 
 /**
  * Get a subsection bucket from the subsection block.
+ *
+ * As with bktr_get_relocation_bucket(), the stride includes one extra entry
+ * so that the sentinel written at entries[num_entries] does not overrun a full
+ * bucket into the next bucket's header.
  * 
  * @param block: Subsection block root
  * @param i: Bucket index (0-based)
@@ -252,7 +263,7 @@ bktr_subsection_bucket_t *bktr_get_subsection_bucket(bktr_subsection_block_t *bl
         return NULL;
     }
     
-    return (bktr_subsection_bucket_t *)((uint8_t *)block->buckets + (sizeof(bktr_subsection_bucket_t) * i));
+    return (bktr_subsection_bucket_t *)((uint8_t *)block->buckets + (sizeof(bktr_subsection_bucket_t) + sizeof(bktr_subsection_entry_t)) * i);
 }
 
 /* ================================ */

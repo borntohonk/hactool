@@ -1228,16 +1228,21 @@ void nca_process_bktr_section(nca_section_ctx_t *ctx) {
             return;
         }
 
-        /* This simplifies logic greatly... */
+        /* This simplifies logic greatly...
+         * Respread the packed on-disk buckets so each gains a trailing gap of one
+         * entry for the sentinel written below. Walk downwards so a bucket is moved
+         * before the bucket below it is read. Destination and source overlap
+         * (the gap is smaller than a bucket), so this must be memmove, not memcpy. */
         for (unsigned int i = ctx->bktr_ctx.relocation_block->num_buckets - 1; i > 0; i--) {
-            memcpy(bktr_get_relocation_bucket(ctx->bktr_ctx.relocation_block, i), &ctx->bktr_ctx.relocation_block->buckets[i], sizeof(bktr_relocation_bucket_t));
+            memmove(bktr_get_relocation_bucket(ctx->bktr_ctx.relocation_block, i), &ctx->bktr_ctx.relocation_block->buckets[i], sizeof(bktr_relocation_bucket_t));
         }
         for (unsigned int i = 0; i + 1 < ctx->bktr_ctx.relocation_block->num_buckets; i++) {
             bktr_relocation_bucket_t *cur_bucket = bktr_get_relocation_bucket(ctx->bktr_ctx.relocation_block, i);
             cur_bucket->entries[cur_bucket->num_entries].virt_offset = ctx->bktr_ctx.relocation_block->bucket_virtual_offsets[i + 1];
         }
+        /* Same respread for subsections; likewise overlapping, so memmove. */
         for (unsigned int i = ctx->bktr_ctx.subsection_block->num_buckets - 1; i > 0; i--) {
-            memcpy(bktr_get_subsection_bucket(ctx->bktr_ctx.subsection_block, i), &ctx->bktr_ctx.subsection_block->buckets[i], sizeof(bktr_subsection_bucket_t));
+            memmove(bktr_get_subsection_bucket(ctx->bktr_ctx.subsection_block, i), &ctx->bktr_ctx.subsection_block->buckets[i], sizeof(bktr_subsection_bucket_t));
         }
         for (unsigned int i = 0; i + 1 < ctx->bktr_ctx.subsection_block->num_buckets; i++) {
             bktr_subsection_bucket_t *cur_bucket = bktr_get_subsection_bucket(ctx->bktr_ctx.subsection_block, i);
