@@ -103,10 +103,11 @@ void filepath_append_n(filepath_t *fpath, uint32_t n, const char *format, ...) {
 }
 
 void filepath_set(filepath_t *fpath, const char *path) {
-    if (strlen(path) < MAX_PATH) {
+    size_t len = strlen(path);
+    if (len < MAX_PATH) {
         fpath->valid = VALIDITY_VALID;
         memset(fpath->char_path, 0, MAX_PATH);
-        strncpy(fpath->char_path, path, MAX_PATH);
+        memcpy(fpath->char_path, path, len);
         filepath_update(fpath);
     } else {
         fpath->valid = VALIDITY_INVALID;

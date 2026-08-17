@@ -16,4 +16,6 @@ typedef enum {
 
 #define GET_VALIDITY_STR(validity) ((validity == VALIDITY_VALID) ? "GOOD" : "FAIL")
 
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
 #endif

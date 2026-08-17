@@ -139,6 +139,7 @@ void nca0_romfs_save(nca0_romfs_ctx_t *ctx) {
 }
 
 void nca0_romfs_print(nca0_romfs_ctx_t *ctx) {
+    (void)ctx;
     /* Is there anything meaningful to print here? */
     fprintf(stderr, "Error: NCA0 RomFS printing not implemented.\n");
 }

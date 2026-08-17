@@ -202,13 +202,17 @@ static void switchfs_process_nca(switchfs_ctx_t *ctx, const char *nca_filename, 
     
     /* Create output directory structure: out/by-type/{ContentType}/{TitleId}/ */
     char output_dir[MAX_PATH];
-    snprintf(output_dir, sizeof(output_dir), "%s%cby-type%c%s%c%016"PRIX64, 
+    int len = snprintf(output_dir, sizeof(output_dir), "%s%cby-type%c%s%c%016"PRIX64, 
             ctx->output_dir,
             PATH_SEPERATOR,
             PATH_SEPERATOR,
             content_type_name,
             PATH_SEPERATOR,
             title_id);
+    if (len < 0 || (size_t)len >= sizeof(output_dir)) {
+        fprintf(stderr, "[WARN] Output directory path too long for NCA: %s\n", nca_filename);
+        return;
+    }
     
     if (!switchfs_mkdir(output_dir)) {
         fprintf(stderr, "[WARN] Failed to create output directory: %s\n", output_dir);
@@ -217,7 +221,11 @@ static void switchfs_process_nca(switchfs_ctx_t *ctx, const char *nca_filename, 
     
     /* Copy the NCA file to the output directory */
     char output_file[MAX_PATH];
-    snprintf(output_file, sizeof(output_file), "%s%cdata.nca", output_dir, PATH_SEPERATOR);
+    len = snprintf(output_file, sizeof(output_file), "%s%cdata.nca", output_dir, PATH_SEPERATOR);
+    if (len < 0 || (size_t)len >= sizeof(output_file)) {
+        fprintf(stderr, "[WARN] Output file path too long for NCA: %s\n", nca_filename);
+        return;
+    }
     
     if (switchfs_copy_file(nca_path, output_file)) {
         printf("[INFO] Copied %s to %s\n", nca_filename, output_file);
