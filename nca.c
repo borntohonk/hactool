@@ -1206,6 +1206,30 @@ void nca_process_bktr_section(nca_section_ctx_t *ctx) {
             return;
         }
 
+        /* A patch whose section needs no AES-CTR-EX remapping ships an empty
+         * subsection block. Nothing downstream copes with that: the respread
+         * loops below count from "num_buckets - 1" on unsigned and would wrap
+         * to UINT32_MAX, and bktr_get_subsection() finds no bucket to answer
+         * with. Rather than special-case every reader, synthesize the bucket
+         * the block would have contained if it described the whole section
+         * with the section's own counter, which is what "no remapping" means.
+         * The calloc() above reserves the slack this writes into. */
+        if (ctx->bktr_ctx.subsection_block->num_buckets == 0) {
+            ctx->bktr_ctx.subsection_block->num_buckets = 1;
+            ctx->bktr_ctx.subsection_block->bucket_physical_offsets[0] = 0;
+
+            bktr_subsection_bucket_t *only = bktr_get_subsection_bucket(ctx->bktr_ctx.subsection_block, 0);
+            only->index = 0;
+            only->num_entries = 1;
+            only->physical_offset_end = ctx->size;
+            only->entries[0].offset = 0;
+            only->entries[0].ctr_val = ctx->header->section_ctr_low;
+
+            if (ctx->bktr_ctx.subsection_block->total_size == 0) {
+                ctx->bktr_ctx.subsection_block->total_size = ctx->size;
+            }
+        }
+
         /* Every "num_buckets - 1" below is unsigned; an empty block would wrap to
          * UINT32_MAX and walk off the end of the allocation. Also cap against the
          * number of bucket offsets the root node can hold, which is what the
