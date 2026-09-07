@@ -127,6 +127,15 @@ To force an Intel 64-bit build explicitly:
 
 make macos-x86
 
+The GitHub Actions macOS artifact links Capstone statically, so it does not
+require a Homebrew Capstone installation on the target Mac. For the same
+self-contained result locally, override `CAPSTONE_LIBS` with Homebrew's static
+archive before building:
+
+CAPSTONE_CFLAGS="-I$(brew --prefix capstone)/include" \
+CAPSTONE_LIBS="$(brew --prefix capstone)/lib/libcapstone.a" \
+make macos-x86
+
 On an Intel Mac, a normal `make` is already an x86_64 build. The explicit target
 is useful when cross-compiling from Apple Silicon; the Capstone dependency must
 then also contain an x86_64 slice.

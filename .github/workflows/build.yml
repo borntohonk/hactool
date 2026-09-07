@@ -60,12 +60,23 @@ jobs:
     - name: Add capstone paths (macOS)
       if: matrix.os == 'macos-15-intel'
       run: |
-        echo "CAPSTONE_CFLAGS += -I$(brew --prefix capstone)/include" >> config.mk
-        echo "CAPSTONE_LIBS += -L$(brew --prefix capstone)/lib -lcapstone" >> config.mk
+        CAPSTONE_PREFIX="$(brew --prefix capstone)"
+        test -f "${CAPSTONE_PREFIX}/lib/libcapstone.a"
+        echo "CAPSTONE_CFLAGS += -I${CAPSTONE_PREFIX}/include" >> config.mk
+        echo "CAPSTONE_LIBS = ${CAPSTONE_PREFIX}/lib/libcapstone.a" >> config.mk
 
     - name: Build macOS Intel x86_64
       if: matrix.os == 'macos-15-intel'
       run: make macos-x86
+
+    - name: Verify macOS artifact is self-contained
+      if: matrix.os == 'macos-15-intel'
+      run: |
+        if otool -L hactool | grep -qi capstone; then
+          echo "hactool still has a dynamic Capstone dependency"
+          otool -L hactool
+          exit 1
+        fi
 
     - name: Build Unix target
       if: matrix.os != 'macos-15-intel'
