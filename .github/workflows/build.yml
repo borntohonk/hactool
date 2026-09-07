@@ -39,9 +39,22 @@ jobs:
         update: true
         install: mingw-w64-x86_64-gcc mingw-w64-x86_64-make mingw-w64-x86_64-capstone
 
-    - name: Install capstone (Linux)
+    - name: Checkout capstone
+      uses: actions/checkout@v7
+      with:
+        fetch-tags: true
+        repository: capstone-engine/capstone
+        path: capstone
+        ref: 5.0.9
+        submodules: recursive
+
+    - name: Build and install Capstone 5.0.9
       if: matrix.os == 'ubuntu-latest'
-      run: sudo apt-get install -y libcapstone-dev
+      run: |
+        sudo apt-get update && sudo apt-get install -y cmake build-essential
+        cd capstone
+        ./make.sh
+        sudo ./make.sh install
 
     - name: Install capstone (macOS)
       if: matrix.os == 'macos-15-intel'
@@ -55,7 +68,7 @@ jobs:
 
     - name: Static link capstone (Linux)
       if: matrix.os == 'ubuntu-latest'
-      run: sed -i 's/-lcapstone/-Wl,-Bstatic -lcapstone -Wl,-Bdynamic/' config.mk
+      run: sed -i 's/-lcapstone/-L\/usr\/local\/lib -Wl,-Bstatic -lcapstone -Wl,-Bdynamic/' config.mk
 
     - name: Add capstone paths (macOS)
       if: matrix.os == 'macos-15-intel'
