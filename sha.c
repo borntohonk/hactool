@@ -14,7 +14,7 @@ sha_ctx_t *new_sha_ctx(hash_type_t type, int hmac) {
 
     mbedtls_md_init(&ctx->digest);
 
-    if (mbedtls_md_setup(&ctx->digest, mbedtls_md_info_from_type(type), hmac)) {
+    if (mbedtls_md_setup(&ctx->digest, mbedtls_md_info_from_type((mbedtls_md_type_t)type), hmac)) {
         FATAL_ERROR("Failed to set up hash context!");
     }
 
@@ -64,7 +64,7 @@ void sha256_get_buffer_hmac(void *digest, const void *secret, size_t s_l, const 
 
     mbedtls_md_init(&ctx->digest);
 
-    if (mbedtls_md_setup(&ctx->digest, mbedtls_md_info_from_type(HASH_TYPE_SHA256), 1)) {
+    if (mbedtls_md_setup(&ctx->digest, mbedtls_md_info_from_type((mbedtls_md_type_t)HASH_TYPE_SHA256), 1)) {
         FATAL_ERROR("Failed to set up hash context!");
     }
 

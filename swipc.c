@@ -223,11 +223,15 @@ static void swipc_kip_callback(const char *kip_name,
         for (int i = 0; i < 32; i++)
             sprintf(build_id_hex + i * 2, "%02X", (unsigned)digest[i]);
         char sidecar[MAX_PATH];
-        snprintf(sidecar, sizeof(sidecar), "%s.buildid", out_path);
-        FILE *f_bid = fopen(sidecar, "w");
-        if (f_bid) {
-            fprintf(f_bid, "%s\n", build_id_hex);
-            fclose(f_bid);
+        int sidecar_len = snprintf(sidecar, sizeof(sidecar), "%s.buildid", out_path);
+        if (sidecar_len < 0 || (size_t)sidecar_len >= sizeof(sidecar)) {
+            fprintf(stderr, "[swipc] Build ID sidecar path too long for: %s\n", out_path);
+        } else {
+            FILE *f_bid = fopen(sidecar, "w");
+            if (f_bid) {
+                fprintf(f_bid, "%s\n", build_id_hex);
+                fclose(f_bid);
+            }
         }
     }
 
@@ -364,7 +368,11 @@ static void swipc_enumerate_files(swipc_ctx_t *ctx, const char *input_path) {
     struct dirent *ent;
     while ((ent = readdir(dir)) != NULL) {
         char full_path[MAX_PATH];
-        snprintf(full_path, sizeof(full_path), "%s%c%s", input_path, PATH_SEPERATOR, ent->d_name);
+        int full_path_len = snprintf(full_path, sizeof(full_path), "%s%c%s", input_path, PATH_SEPERATOR, ent->d_name);
+        if (full_path_len < 0 || (size_t)full_path_len >= sizeof(full_path)) {
+            fprintf(stderr, "[swipc] Path too long, skipping: %s\n", ent->d_name);
+            continue;
+        }
         struct stat st;
         if (stat(full_path, &st) == 0 && S_ISDIR(st.st_mode)) continue;
         swipc_process_nca(ctx, ent->d_name, input_path);
@@ -389,8 +397,13 @@ void swipc_process(swipc_ctx_t *ctx) {
 
     char programs_dir[MAX_PATH];
     char applets_dir[MAX_PATH];
-    snprintf(programs_dir, sizeof(programs_dir), "%s%cprograms", ctx->output_dir, PATH_SEPERATOR);
-    snprintf(applets_dir,  sizeof(applets_dir),  "%s%capplets",  ctx->output_dir, PATH_SEPERATOR);
+    int programs_len = snprintf(programs_dir, sizeof(programs_dir), "%s%cprograms", ctx->output_dir, PATH_SEPERATOR);
+    int applets_len  = snprintf(applets_dir,  sizeof(applets_dir),  "%s%capplets",  ctx->output_dir, PATH_SEPERATOR);
+    if (programs_len < 0 || (size_t)programs_len >= sizeof(programs_dir)
+        || applets_len < 0 || (size_t)applets_len >= sizeof(applets_dir)) {
+        fprintf(stderr, "[swipc] Output directory path too long: %s\n", ctx->output_dir);
+        return;
+    }
     swipc_mkdir(programs_dir);
     swipc_mkdir(applets_dir);
 

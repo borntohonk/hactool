@@ -35,7 +35,7 @@ void hfs0_process(hfs0_ctx_t *ctx) {
     uint64_t cur_ofs = 0;
     for (unsigned int i = 0; i < ctx->header->num_files; i++) {
         hfs0_file_entry_t *cur_file = hfs0_get_file_entry(ctx->header, i);
-        if (cur_file->offset < cur_ofs) {
+        if (cur_file->offset < cur_ofs || cur_file->size > max_size || cur_file->offset > max_size - cur_file->size) {
             printf("Error: HFS0 is corrupt!\n");
             exit(EXIT_FAILURE);
         }

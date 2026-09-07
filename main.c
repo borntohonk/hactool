@@ -68,6 +68,10 @@ static void usage(void) {
         "                         Supported types are integers 0-9 or [program, meta, control, manual, data, publicdata].\n"
         "  --appendsectypes   Append a section type string to section paths.\n"
         "  --suppresskeys     Suppress output of decrypted keys.\n"
+        , __TIME__, __DATE__, prog_name);
+    /* Split across several calls: a single literal would exceed the 4095 character
+     * string length that ISO C99 compilers are required to support. */
+    fputs(
         "NPDM options:\n"
         "  --json=file        Specify file path for saving JSON representation of program permissions to.\n"
         "NACP options:\n"
@@ -101,6 +105,8 @@ static void usage(void) {
         "  --securedir=dir    Specify XCI secure HFS0 directory path.\n"
         "  --logodir=dir      Specify XCI logo HFS0 directory path.\n"
         "  --outdir=dir       Specify XCI directory path. Overrides previous paths, if present.\n"
+        , stderr);
+    fputs(
         "Package1 options:\n"
         "  --package1dir=dir  Specify Package1 directory path.\n"
         "  --outdir=dir       Specify Package1 directory path. Overrides previous path, if present.\n"
@@ -134,7 +140,7 @@ static void usage(void) {
         "Key Derivation options:\n"
         "  --sbk=key          Set console unique Secure Boot Key for key derivation.\n"
         "  --tseckey=key      Set console unique TSEC Key for key derivation.\n"
-        "\n", __TIME__, __DATE__, prog_name);
+        "\n", stderr);
     exit(EXIT_FAILURE);
 }
 

@@ -44,6 +44,17 @@
 #include <stdio.h>
 #endif
 
+/* The conversion routines below deliberately fall through their switch cases.
+ * Mark this explicitly so compilers do not diagnose it as an accident. */
+#if defined(__has_attribute)
+#  if __has_attribute(fallthrough)
+#    define CVTUTF_FALLTHROUGH __attribute__((fallthrough))
+#  endif
+#endif
+#ifndef CVTUTF_FALLTHROUGH
+#  define CVTUTF_FALLTHROUGH ((void)0)
+#endif
+
 static const int halfShift  = 10; /* used for shifting by 10 bits */
 
 static const UTF32 halfBase = 0x0010000UL;
@@ -267,9 +278,9 @@ ConversionResult ConvertUTF16toUTF8 (
             target -= bytesToWrite; result = targetExhausted; break;
         }
         switch (bytesToWrite) { /* note: everything falls through. */
-            case 4: *--target = (UTF8)((ch | byteMark) & byteMask); ch >>= 6;
-            case 3: *--target = (UTF8)((ch | byteMark) & byteMask); ch >>= 6;
-            case 2: *--target = (UTF8)((ch | byteMark) & byteMask); ch >>= 6;
+            case 4: *--target = (UTF8)((ch | byteMark) & byteMask); ch >>= 6; CVTUTF_FALLTHROUGH;
+            case 3: *--target = (UTF8)((ch | byteMark) & byteMask); ch >>= 6; CVTUTF_FALLTHROUGH;
+            case 2: *--target = (UTF8)((ch | byteMark) & byteMask); ch >>= 6; CVTUTF_FALLTHROUGH;
             case 1: *--target =  (UTF8)(ch | firstByteMark[bytesToWrite]);
         }
         target += bytesToWrite;
@@ -298,8 +309,8 @@ static Boolean isLegalUTF8(const UTF8 *source, int length) {
     switch (length) {
     default: return false;
         /* Everything else falls through when "true"... */
-    case 4: if ((a = (*--srcptr)) < 0x80 || a > 0xBF) return false;
-    case 3: if ((a = (*--srcptr)) < 0x80 || a > 0xBF) return false;
+    case 4: if ((a = (*--srcptr)) < 0x80 || a > 0xBF) return false; CVTUTF_FALLTHROUGH;
+    case 3: if ((a = (*--srcptr)) < 0x80 || a > 0xBF) return false; CVTUTF_FALLTHROUGH;
     case 2: if ((a = (*--srcptr)) > 0xBF) return false;
 
         switch (*source) {
@@ -310,6 +321,7 @@ static Boolean isLegalUTF8(const UTF8 *source, int length) {
             case 0xF4: if (a > 0x8F) return false; break;
             default:   if (a < 0x80) return false;
         }
+        CVTUTF_FALLTHROUGH;
 
     case 1: if (*source >= 0x80 && *source < 0xC2) return false;
     }
@@ -342,6 +354,9 @@ ConversionResult ConvertUTF8toUTF16 (
     while (source < sourceEnd) {
         UTF32 ch = 0;
         unsigned short extraBytesToRead = trailingBytesForUTF8[*source];
+        if (extraBytesToRead >= sizeof(offsetsFromUTF8)/sizeof(offsetsFromUTF8[0])) {
+            result = sourceIllegal; break;
+        }
         if (source + extraBytesToRead >= sourceEnd) {
             result = sourceExhausted; break;
         }
@@ -354,11 +369,11 @@ ConversionResult ConvertUTF8toUTF16 (
          * The cases all fall through. See "Note A" below.
          */
         switch (extraBytesToRead) {
-            case 5: ch += *source++; ch <<= 6; /* remember, illegal UTF-8 */
-            case 4: ch += *source++; ch <<= 6; /* remember, illegal UTF-8 */
-            case 3: ch += *source++; ch <<= 6;
-            case 2: ch += *source++; ch <<= 6;
-            case 1: ch += *source++; ch <<= 6;
+            case 5: ch += *source++; ch <<= 6; CVTUTF_FALLTHROUGH; /* remember, illegal UTF-8 */
+            case 4: ch += *source++; ch <<= 6; CVTUTF_FALLTHROUGH; /* remember, illegal UTF-8 */
+            case 3: ch += *source++; ch <<= 6; CVTUTF_FALLTHROUGH;
+            case 2: ch += *source++; ch <<= 6; CVTUTF_FALLTHROUGH;
+            case 1: ch += *source++; ch <<= 6; CVTUTF_FALLTHROUGH;
             case 0: ch += *source++;
         }
         ch -= offsetsFromUTF8[extraBytesToRead];
@@ -445,9 +460,9 @@ ConversionResult ConvertUTF32toUTF8 (
             target -= bytesToWrite; result = targetExhausted; break;
         }
         switch (bytesToWrite) { /* note: everything falls through. */
-            case 4: *--target = (UTF8)((ch | byteMark) & byteMask); ch >>= 6;
-            case 3: *--target = (UTF8)((ch | byteMark) & byteMask); ch >>= 6;
-            case 2: *--target = (UTF8)((ch | byteMark) & byteMask); ch >>= 6;
+            case 4: *--target = (UTF8)((ch | byteMark) & byteMask); ch >>= 6; CVTUTF_FALLTHROUGH;
+            case 3: *--target = (UTF8)((ch | byteMark) & byteMask); ch >>= 6; CVTUTF_FALLTHROUGH;
+            case 2: *--target = (UTF8)((ch | byteMark) & byteMask); ch >>= 6; CVTUTF_FALLTHROUGH;
             case 1: *--target = (UTF8) (ch | firstByteMark[bytesToWrite]);
         }
         target += bytesToWrite;
@@ -468,6 +483,9 @@ ConversionResult ConvertUTF8toUTF32 (
     while (source < sourceEnd) {
         UTF32 ch = 0;
         unsigned short extraBytesToRead = trailingBytesForUTF8[*source];
+        if (extraBytesToRead >= sizeof(offsetsFromUTF8)/sizeof(offsetsFromUTF8[0])) {
+            result = sourceIllegal; break;
+        }
         if (source + extraBytesToRead >= sourceEnd) {
             result = sourceExhausted; break;
         }
@@ -480,11 +498,11 @@ ConversionResult ConvertUTF8toUTF32 (
          * The cases all fall through. See "Note A" below.
          */
         switch (extraBytesToRead) {
-            case 5: ch += *source++; ch <<= 6;
-            case 4: ch += *source++; ch <<= 6;
-            case 3: ch += *source++; ch <<= 6;
-            case 2: ch += *source++; ch <<= 6;
-            case 1: ch += *source++; ch <<= 6;
+            case 5: ch += *source++; ch <<= 6; CVTUTF_FALLTHROUGH;
+            case 4: ch += *source++; ch <<= 6; CVTUTF_FALLTHROUGH;
+            case 3: ch += *source++; ch <<= 6; CVTUTF_FALLTHROUGH;
+            case 2: ch += *source++; ch <<= 6; CVTUTF_FALLTHROUGH;
+            case 1: ch += *source++; ch <<= 6; CVTUTF_FALLTHROUGH;
             case 0: ch += *source++;
         }
         ch -= offsetsFromUTF8[extraBytesToRead];

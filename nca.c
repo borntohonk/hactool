@@ -1206,16 +1206,67 @@ void nca_process_bktr_section(nca_section_ctx_t *ctx) {
             return;
         }
 
-        /* This simplifies logic greatly... */
+        /* A patch whose section needs no AES-CTR-EX remapping ships an empty
+         * subsection block. Nothing downstream copes with that: the respread
+         * loops below count from "num_buckets - 1" on unsigned and would wrap
+         * to UINT32_MAX, and bktr_get_subsection() finds no bucket to answer
+         * with. Rather than special-case every reader, synthesize the bucket
+         * the block would have contained if it described the whole section
+         * with the section's own counter, which is what "no remapping" means.
+         * The calloc() above reserves the slack this writes into. */
+        if (ctx->bktr_ctx.subsection_block->num_buckets == 0) {
+            ctx->bktr_ctx.subsection_block->num_buckets = 1;
+            ctx->bktr_ctx.subsection_block->bucket_physical_offsets[0] = 0;
+
+            bktr_subsection_bucket_t *only = bktr_get_subsection_bucket(ctx->bktr_ctx.subsection_block, 0);
+            only->index = 0;
+            only->num_entries = 1;
+            only->physical_offset_end = ctx->size;
+            only->entries[0].offset = 0;
+            only->entries[0].ctr_val = ctx->header->section_ctr_low;
+
+            if (ctx->bktr_ctx.subsection_block->total_size == 0) {
+                ctx->bktr_ctx.subsection_block->total_size = ctx->size;
+            }
+        }
+
+        /* Every "num_buckets - 1" below is unsigned; an empty block would wrap to
+         * UINT32_MAX and walk off the end of the allocation. Also cap against the
+         * number of bucket offsets the root node can hold, which is what the
+         * calloc() calls above reserve slack for. */
+        const uint32_t max_buckets = 0x3FF0 / sizeof(uint64_t);
+        if (ctx->bktr_ctx.relocation_block->num_buckets == 0
+            || ctx->bktr_ctx.relocation_block->num_buckets > max_buckets
+            || ctx->bktr_ctx.subsection_block->num_buckets == 0
+            || ctx->bktr_ctx.subsection_block->num_buckets > max_buckets) {
+            fprintf(stderr, "BKTR bucket count validation FAILED!\n");
+            fprintf(stderr, "  relocation num_buckets(%"PRIu32"), subsection num_buckets(%"PRIu32"), max(%"PRIu32")\n",
+                    ctx->bktr_ctx.relocation_block->num_buckets,
+                    ctx->bktr_ctx.subsection_block->num_buckets,
+                    max_buckets);
+            free(relocs);
+            free(subs);
+            ctx->bktr_ctx.relocation_block = NULL;
+            ctx->bktr_ctx.subsection_block = NULL;
+            ctx->superblock_hash_validity = VALIDITY_INVALID;
+            return;
+        }
+
+        /* This simplifies logic greatly...
+         * Respread the packed on-disk buckets so each gains a trailing gap of one
+         * entry for the sentinel written below. Walk downwards so a bucket is moved
+         * before the bucket below it is read. Destination and source overlap
+         * (the gap is smaller than a bucket), so this must be memmove, not memcpy. */
         for (unsigned int i = ctx->bktr_ctx.relocation_block->num_buckets - 1; i > 0; i--) {
-            memcpy(bktr_get_relocation_bucket(ctx->bktr_ctx.relocation_block, i), &ctx->bktr_ctx.relocation_block->buckets[i], sizeof(bktr_relocation_bucket_t));
+            memmove(bktr_get_relocation_bucket(ctx->bktr_ctx.relocation_block, i), &ctx->bktr_ctx.relocation_block->buckets[i], sizeof(bktr_relocation_bucket_t));
         }
         for (unsigned int i = 0; i + 1 < ctx->bktr_ctx.relocation_block->num_buckets; i++) {
             bktr_relocation_bucket_t *cur_bucket = bktr_get_relocation_bucket(ctx->bktr_ctx.relocation_block, i);
             cur_bucket->entries[cur_bucket->num_entries].virt_offset = ctx->bktr_ctx.relocation_block->bucket_virtual_offsets[i + 1];
         }
+        /* Same respread for subsections; likewise overlapping, so memmove. */
         for (unsigned int i = ctx->bktr_ctx.subsection_block->num_buckets - 1; i > 0; i--) {
-            memcpy(bktr_get_subsection_bucket(ctx->bktr_ctx.subsection_block, i), &ctx->bktr_ctx.subsection_block->buckets[i], sizeof(bktr_subsection_bucket_t));
+            memmove(bktr_get_subsection_bucket(ctx->bktr_ctx.subsection_block, i), &ctx->bktr_ctx.subsection_block->buckets[i], sizeof(bktr_subsection_bucket_t));
         }
         for (unsigned int i = 0; i + 1 < ctx->bktr_ctx.subsection_block->num_buckets; i++) {
             bktr_subsection_bucket_t *cur_bucket = bktr_get_subsection_bucket(ctx->bktr_ctx.subsection_block, i);
