@@ -55,7 +55,7 @@ inline int fseeko64(FILE *__stream, long long __off, int __whence)
     return _fseeki64(__stream, __off, __whence);
 }
 #define ftello64 _ftelli64
-#elif __MINGW32__
+#elif defined(__MINGW32__)
     /* MINGW32 does not have 64-bit offsets even with large file support. */
     extern int fseeko64 (FILE *__stream, _off64_t __off, int __whence);
     /* ftello64 is provided natively on MinGW */

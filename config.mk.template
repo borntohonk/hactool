@@ -1,3 +1,11 @@
-CC = gcc
-CFLAGS = -O2 -Wall -Wextra -pedantic -std=gnu11 -fPIC
-LDFLAGS = -lmbedtls -lmbedx509 -lmbedcrypto -lcapstone
+# Optional local overrides.  The Makefile supplies portable defaults and
+# discovers Capstone through pkg-config, Homebrew, or MacPorts.
+CC ?= cc
+AR ?= ar
+CFLAGS ?= -O2 -Wall -Wextra -pedantic -std=gnu11 -fPIC
+LDFLAGS ?= -lmbedtls -lmbedx509 -lmbedcrypto
+
+# Set these explicitly only when Capstone is installed in a non-standard
+# location and cannot be found automatically.
+# CAPSTONE_CFLAGS = -I/opt/local/include
+# CAPSTONE_LIBS = -L/opt/local/lib -lcapstone

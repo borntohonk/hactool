@@ -7,6 +7,7 @@
 #include <windows.h>
 #else
 #include <dirent.h>
+#include <errno.h>
 #endif
 #include "switchfs.h"
 #include "nca.h"

@@ -94,7 +94,8 @@ Key Derivation options:
 
 ## Building
 
-Copy `config.mk.template` to `config.mk`, make changes as required, and then run `make`.
+The default build works with the system C compiler. Copy `config.mk.template` to
+`config.mk` only when local overrides are needed, then run `make`.
 If your `make` is not GNU make (e.g. on BSD variants), you need to call `gmake` instead.
 
 If on Windows, I recommend using MinGW.
@@ -111,8 +112,24 @@ apt-get install libcapstone-dev
 on arch linux:
 pacman -S capstone
 
-on macos:
-brew install capstone
+on macOS:
+brew install capstone pkg-config
+
+For Intel macOS systems where Homebrew is unavailable, MacPorts can be used:
+
+sudo port install capstone pkgconfig
+
+The Makefile detects Capstone through `pkg-config` and also knows the standard
+Intel Homebrew (`/usr/local`) and MacPorts (`/opt/local`) locations. If it is
+installed elsewhere, set `CAPSTONE_CFLAGS` and `CAPSTONE_LIBS` in `config.mk`.
+
+To force an Intel 64-bit build explicitly:
+
+make macos-x86
+
+On an Intel Mac, a normal `make` is already an x86_64 build. The explicit target
+is useful when cross-compiling from Apple Silicon; the Capstone dependency must
+then also contain an x86_64 slice.
 
 on fedora:
 sudo dnf install capstone capstone-devel

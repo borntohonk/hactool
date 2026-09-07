@@ -1,20 +1,65 @@
-include config.mk
+-include config.mk
+
+# Keep the build usable without a generated config.mk.  This is particularly
+# useful on macOS, where the system compiler is clang rather than gcc.
+CC ?= cc
+AR ?= ar
+CFLAGS ?= -O2 -Wall -Wextra -pedantic -std=gnu11 -fPIC
+LDFLAGS ?= -lmbedtls -lmbedx509 -lmbedcrypto
+
+UNAME_S := $(shell uname -s 2>/dev/null)
+UNAME_M := $(shell uname -m 2>/dev/null)
+
+# The old flags were Linux/MinGW-specific.  They cause feature-test macro
+# conflicts with Apple's libc, especially on older Intel macOS releases.
+ifeq ($(UNAME_S),Darwin)
+PLATFORM_CFLAGS += -D_DARWIN_C_SOURCE
+else
+PLATFORM_CFLAGS += -D_BSD_SOURCE -D_POSIX_SOURCE -D_POSIX_C_SOURCE=200112L -D_DEFAULT_SOURCE
+endif
+PLATFORM_CFLAGS += -D_FILE_OFFSET_BITS=64
+
+# MinGW needs its printf compatibility mode, but defining it on clang/GCC
+# builds for Unix is incorrect and can hide portability problems.
+MINGW_TRIPLE := $(shell $(CC) -dumpmachine 2>/dev/null)
+ifneq ($(findstring mingw,$(MINGW_TRIPLE)),)
+PLATFORM_CFLAGS += -D__USE_MINGW_ANSI_STDIO=1
+endif
+
+PKG_CONFIG ?= pkg-config
+CAPSTONE_CFLAGS ?= $(shell $(PKG_CONFIG) --cflags capstone 2>/dev/null)
+CAPSTONE_LIBS ?= $(shell $(PKG_CONFIG) --libs capstone 2>/dev/null)
+
+# Support both Intel Homebrew and MacPorts when pkg-config is not available.
+# Users can always override CAPSTONE_CFLAGS/CAPSTONE_LIBS in config.mk.
+ifeq ($(strip $(CAPSTONE_LIBS)),)
+CAPSTONE_PREFIX := $(shell brew --prefix capstone 2>/dev/null)
+ifneq ($(strip $(CAPSTONE_PREFIX)),)
+CAPSTONE_CFLAGS += -I$(CAPSTONE_PREFIX)/include
+CAPSTONE_LIBS += -L$(CAPSTONE_PREFIX)/lib -lcapstone
+else ifneq ($(wildcard /opt/local/include/capstone/capstone.h),)
+CAPSTONE_CFLAGS += -I/opt/local/include
+CAPSTONE_LIBS += -L/opt/local/lib -lcapstone
+else
+CAPSTONE_LIBS = -lcapstone
+endif
+endif
+
+CFLAGS += $(PLATFORM_CFLAGS) $(CAPSTONE_CFLAGS)
 
 .PHONY: clean
 
 INCLUDE = -I ./mbedtls/include
 LIBDIR = ./mbedtls/library
-CFLAGS += -D_BSD_SOURCE -D_POSIX_SOURCE -D_POSIX_C_SOURCE=200112L -D_DEFAULT_SOURCE -D__USE_MINGW_ANSI_STDIO=1 -D_FILE_OFFSET_BITS=64
-
 all:
-	$(MAKE) -C mbedtls lib
+	$(MAKE) -C mbedtls lib CC="$(CC)" AR="$(AR)" CFLAGS="$(CFLAGS)"
 	$(MAKE) hactool$(EXEEXT)
 
 .c.o:
 	$(CC) $(INCLUDE) -c $(CFLAGS) -o $@ $<
 
 hactool$(EXEEXT): save.o sha.o aes.o extkeys.o rsa.o npdm.o nacp.o cnmt.o nsp.o bktr.o kip.o packages.o pki.o pk11_extract_key_sources.o tsec_fw.o pfs0.o hfs0.o nca0_romfs.o romfs.o utils.o nax0.o nso.o lz4.o nca.o xci.o switchfs.o swipc.o find_patterns.o main.o filepath.o ConvertUTF.o cJSON.o
-	$(CC) -o $@ $^ -L $(LIBDIR) $(LDFLAGS)
+	$(CC) -o $@ $^ -L $(LIBDIR) $(LDFLAGS) $(CAPSTONE_LIBS)
 
 aes.o: aes.h types.h
 
@@ -86,6 +131,15 @@ clean:
 clean_full:
 	rm -f *.o hactool hactool.exe
 	$(MAKE) -C mbedtls clean
+
+# Build an Intel 64-bit Mach-O binary explicitly.  On an Intel Mac this is
+# equivalent to the normal build; on Apple Silicon it cross-compiles and the
+# installed Capstone library must also provide an x86_64 slice.
+.PHONY: macos-x86 macos-x86_64
+macos-x86 macos-x86_64:
+	@test "$(UNAME_S)" = "Darwin" || (echo "macos-x86 requires macOS"; exit 1)
+	$(MAKE) clean
+	$(MAKE) CC=clang CFLAGS="$(CFLAGS) -arch x86_64" LDFLAGS="$(LDFLAGS) -arch x86_64"
 
 dist: clean_full
 	$(eval HACTOOLVER = $(shell grep '\bHACTOOL_VERSION\b' version.h \
