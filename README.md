@@ -6,6 +6,8 @@ hactool is a tool to view information about, decrypt, and extract common file fo
 
 It is heavily inspired by [ctrtool](https://github.com/profi200/Project_CTR/tree/master/ctrtool).
 
+uses zbic library from https://github.com/kinnay/zbic
+
 ## Usage
 
 ```

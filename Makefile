@@ -5,6 +5,7 @@
 CC ?= cc
 AR ?= ar
 CFLAGS ?= -O2 -Wall -Wextra -pedantic -std=gnu11 -fPIC
+CFLAGS += -DZSTD_ZBIC_SUPPORT=1
 LDFLAGS ?= -lmbedtls -lmbedx509 -lmbedcrypto
 
 UNAME_S := $(shell uname -s 2>/dev/null)
@@ -58,7 +59,7 @@ all:
 .c.o:
 	$(CC) $(INCLUDE) -c $(CFLAGS) -o $@ $<
 
-hactool$(EXEEXT): save.o sha.o aes.o extkeys.o rsa.o npdm.o nacp.o cnmt.o nsp.o bktr.o kip.o packages.o pki.o pk11_extract_key_sources.o tsec_fw.o pfs0.o hfs0.o nca0_romfs.o romfs.o utils.o nax0.o nso.o lz4.o nca.o xci.o switchfs.o swipc.o find_patterns.o main.o filepath.o ConvertUTF.o cJSON.o
+hactool$(EXEEXT): save.o sha.o aes.o extkeys.o rsa.o npdm.o nacp.o cnmt.o nsp.o bktr.o kip.o packages.o pki.o pk11_extract_key_sources.o tsec_fw.o pfs0.o hfs0.o nca0_romfs.o romfs.o utils.o nax0.o nso.o lz4.o zstd.o nca.o xci.o switchfs.o swipc.o find_patterns.o main.o filepath.o ConvertUTF.o cJSON.o
 	$(CC) -o $@ $^ -L $(LIBDIR) $(LDFLAGS) $(CAPSTONE_LIBS)
 
 aes.o: aes.h types.h
@@ -72,6 +73,8 @@ filepath.o: filepath.c types.h
 hfs0.o: hfs0.h types.h
 
 kip.o: kip.h types.h
+
+zstd.o: zstd.h zstd_errors.h
 
 lz4.o: lz4.h
 
@@ -101,7 +104,7 @@ cnmt.o: cnmt.c cnmt.h cJSON.h types.h
 
 nsp.o: nsp.c nsp.h pfs0.h extkeys.h nca.h filepath.h types.h
 
-nso.o: nso.h types.h
+nso.o: nso.h types.h lz4.h zstd.h zstd_errors.h sha.h
 
 romfs.o: ivfc.h types.h
 

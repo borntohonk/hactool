@@ -1948,6 +1948,22 @@ int nca_extract_pfs0_main(nca_ctx_t *ctx, const char *output_path) {
         void       *dec_buf    = NULL;
 
         if (fe->size >= sizeof(uint32_t) && *(uint32_t *)raw == MAGIC_NSO0) {
+            nso0_header_t *raw_hdr = (nso0_header_t *)raw;
+            static const char *seg_names[3] = { ".text", ".rodata", ".rwdata" };
+            printf("    'main' is NSO0, compression:\n");
+            for (unsigned int i = 0; i < 3; i++) {
+                int is_compressed = (raw_hdr->flags >> i) & 1;
+                if (is_compressed) {
+                    printf("        %-8s%-14s(0x%08"PRIx32" -> 0x%08"PRIx32" bytes)\n",
+                        seg_names[i],
+                        nso0_segment_algorithm_str(raw_hdr, i),
+                        raw_hdr->compressed_sizes[i],
+                        raw_hdr->segments[i].decomp_size);
+                } else {
+                    printf("        %-8s%s\n", seg_names[i], nso0_segment_algorithm_str(raw_hdr, i));
+                }
+            }
+
             size_t dec_size = 0;
             dec_buf = nso0_decompress_buf(raw, (size_t)fe->size, &dec_size);
             if (dec_buf != NULL) {

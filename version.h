@@ -1,6 +1,6 @@
 #ifndef HACTOOL_VERSION_H
 #define HACTOOL_VERSION_H
 
-#define HACTOOL_VERSION "1.5.2"
+#define HACTOOL_VERSION "1.5.3"
 
 #endif
