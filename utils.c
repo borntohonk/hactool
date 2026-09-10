@@ -275,7 +275,9 @@ const char *get_key_revision_summary(uint8_t key_rev) {
         case 0x14:
             return "21.0.0-21.2.0";
         case 0x15:
-            return "22.0.0-";
+            return "22.0.0-22.5.0";
+        case 0x16:
+            return "23.0.0-";
         default:
             return "Unknown";
     }
