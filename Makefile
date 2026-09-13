@@ -59,7 +59,7 @@ all:
 .c.o:
 	$(CC) $(INCLUDE) -c $(CFLAGS) -o $@ $<
 
-hactool$(EXEEXT): save.o sha.o aes.o extkeys.o rsa.o npdm.o nacp.o cnmt.o nsp.o bktr.o kip.o packages.o pki.o pk11_extract_key_sources.o tsec_fw.o pfs0.o hfs0.o nca0_romfs.o romfs.o utils.o nax0.o nso.o lz4.o zstd.o nca.o xci.o switchfs.o swipc.o find_patterns.o main.o filepath.o ConvertUTF.o cJSON.o
+hactool$(EXEEXT): save.o sha.o aes.o extkeys.o rsa.o npdm.o nacp.o cnmt.o nsp.o bktr.o kip.o packages.o pki.o pk11_extract_key_sources.o tsec_fw.o pfs0.o hfs0.o nca0_romfs.o romfs.o utils.o nax0.o nso.o lz4.o zstd.o nca.o xci.o switchfs.o swipc.o keygen_firmware.o find_patterns.o main.o filepath.o ConvertUTF.o cJSON.o
 	$(CC) -o $@ $^ -L $(LIBDIR) $(LDFLAGS) $(CAPSTONE_LIBS)
 
 aes.o: aes.h types.h
@@ -119,6 +119,8 @@ sha.o: sha.h types.h
 switchfs.o: switchfs.h nca.h types.h filepath.h
 
 swipc.o: swipc.h nca.h packages.h kip.h types.h filepath.h sha.h
+
+keygen_firmware.o: keygen_firmware.h nca.h packages.h pk11_extract_key_sources.h pki.h utils.h filepath.h types.h settings.h
 
 utils.o: utils.h types.h
 

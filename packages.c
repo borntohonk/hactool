@@ -376,6 +376,204 @@ void pk11_save(pk11_ctx_t *ctx) {
     }
 }
 
+/* ── pk11_process_buffer ────────────────────────────────────────────────────
+ * Buffer-based mirror of pk11_process(). See packages.h for the contract.
+ * -------------------------------------------------------------------------- */
+
+static int pk11_buf_is_legacy(const pk11_metadata_t *metadata) {
+    return metadata->version < 0x0E || memcmp(metadata->build_date, "20181107", 8) < 0;
+}
+
+int pk11_process_buffer(const unsigned char *data,
+                        size_t               size,
+                        hactool_ctx_t       *tool_ctx,
+                        pk11_ctx_t          *out_ctx) {
+    memset(out_ctx, 0, sizeof(*out_ctx));
+    out_ctx->file = NULL;
+    out_ctx->tool_ctx = tool_ctx;
+
+    size_t pos = 0;
+#define BUF_REMAINING (size - pos)
+#define BUF_READ(dst, len) do { \
+        if ((len) > BUF_REMAINING) { \
+            fprintf(stderr, "pk11: buffer too small while reading (need 0x%zx, have 0x%zx)\n", (size_t)(len), BUF_REMAINING); \
+            return 0; \
+        } \
+        memcpy((dst), data + pos, (len)); \
+        pos += (len); \
+    } while (0)
+
+    /* Detect mariko: mirrors pk11_is_mariko(), which reads mariko_oem_header
+     * from the start of the image and checks aes_mac/_0x160 are all-zero.
+     * (pk11_process() also does a throwaway full-ctx->stage1 read before this;
+     * it gets fully overwritten below regardless of branch taken, so it's
+     * omitted here — it has no effect on the final result.) */
+    if (size < sizeof(out_ctx->mariko_oem_header)) {
+        fprintf(stderr, "pk11: buffer too small for OEM header (0x%zx bytes)\n", size);
+        return 0;
+    }
+    memcpy(&out_ctx->mariko_oem_header, data, sizeof(out_ctx->mariko_oem_header));
+    out_ctx->is_mariko = 1;
+    for (int i = 0; i < 0x10; i++) {
+        if (out_ctx->mariko_oem_header.aes_mac[i] != 0 || out_ctx->mariko_oem_header._0x160[i] != 0) {
+            out_ctx->is_mariko = 0;
+            break;
+        }
+    }
+
+    if (out_ctx->is_mariko) {
+        pos = sizeof(out_ctx->mariko_oem_header);
+
+        if (out_ctx->mariko_oem_header.bl_size < sizeof(out_ctx->metadata)) {
+            fprintf(stderr, "pk11: PK11 seems corrupt (mariko bl_size too small)!\n");
+            return 0;
+        }
+
+        out_ctx->mariko_bl = calloc(1, out_ctx->mariko_oem_header.bl_size);
+        if (out_ctx->mariko_bl == NULL) {
+            fprintf(stderr, "pk11: failed to allocate mariko bootloader buffer!\n");
+            return 0;
+        }
+        BUF_READ(out_ctx->mariko_bl, out_ctx->mariko_oem_header.bl_size);
+
+        memcpy(&out_ctx->metadata, out_ctx->mariko_bl, sizeof(out_ctx->metadata));
+
+        out_ctx->is_decrypted = memcmp(&out_ctx->metadata, out_ctx->mariko_bl + 0x20, sizeof(out_ctx->metadata)) == 0;
+
+        if (!out_ctx->is_decrypted) {
+            uint32_t enc_size = out_ctx->mariko_oem_header.bl_size - sizeof(out_ctx->metadata);
+            if (enc_size > 0) {
+                aes_ctx_t *crypt_ctx = new_aes_ctx(tool_ctx->settings.keyset.mariko_bek, 0x10, AES_MODE_CBC);
+                aes_setiv(crypt_ctx, out_ctx->mariko_bl + 0x10, 0x10);
+                aes_decrypt(crypt_ctx, out_ctx->mariko_bl + 0x20, out_ctx->mariko_bl + 0x20, enc_size);
+                free_aes_ctx(crypt_ctx);
+                out_ctx->is_decrypted = memcmp(&out_ctx->metadata, out_ctx->mariko_bl + 0x20, sizeof(out_ctx->metadata)) == 0;
+            }
+        }
+    } else {
+        pos = 0;
+        BUF_READ(&out_ctx->metadata, sizeof(out_ctx->metadata));
+        /* pos is now sizeof(metadata) (0x20) — the byte offset where the
+         * stage1 body begins. Do NOT reset to 0: on-disk layout is
+         * [metadata 0x20][stage1.modern/legacy][pk11][pk11_mac?], and
+         * ctx->stage1 itself holds only the post-metadata portion (this is
+         * what pk11_extract_key_sources.c's blob construction expects). */
+    }
+
+    out_ctx->is_modern = !pk11_buf_is_legacy(&out_ctx->metadata);
+
+    if (out_ctx->is_mariko) {
+        if (out_ctx->is_decrypted) {
+            if (out_ctx->is_modern) {
+                memcpy(&out_ctx->stage1.modern, out_ctx->mariko_bl + 0x20, sizeof(out_ctx->stage1.modern));
+                out_ctx->pk11_size = out_ctx->stage1.modern.pk11_size;
+            } else {
+                memcpy(&out_ctx->stage1.legacy, out_ctx->mariko_bl + 0x20, sizeof(out_ctx->stage1.legacy));
+                out_ctx->pk11_size = out_ctx->stage1.legacy.pk11_size;
+            }
+        } else {
+            if (out_ctx->is_modern) {
+                out_ctx->pk11_size = out_ctx->mariko_oem_header.bl_size - 0x20 - sizeof(out_ctx->stage1.modern);
+            } else {
+                out_ctx->pk11_size = out_ctx->mariko_oem_header.bl_size - 0x20 - sizeof(out_ctx->stage1.legacy);
+            }
+        }
+    } else {
+        /* Continue reading from pos == sizeof(metadata); this is the
+         * stage1.modern/legacy body immediately following it on disk. */
+        if (out_ctx->is_modern) {
+            BUF_READ(&out_ctx->stage1.modern, sizeof(out_ctx->stage1.modern));
+            out_ctx->pk11_size = out_ctx->stage1.modern.pk11_size;
+        } else {
+            BUF_READ(&out_ctx->stage1.legacy, sizeof(out_ctx->stage1.legacy));
+            out_ctx->pk11_size = out_ctx->stage1.legacy.pk11_size;
+        }
+    }
+
+    out_ctx->pk11 = calloc(1, out_ctx->pk11_size);
+    if (out_ctx->pk11 == NULL) {
+        fprintf(stderr, "pk11: failed to allocate PK11 buffer!\n");
+        return 0;
+    }
+
+    if (out_ctx->is_mariko) {
+        size_t stage1_hdr_size = out_ctx->is_modern ? sizeof(out_ctx->stage1.modern) : sizeof(out_ctx->stage1.legacy);
+        if ((size_t)0x20 + stage1_hdr_size + out_ctx->pk11_size > out_ctx->mariko_oem_header.bl_size) {
+            fprintf(stderr, "pk11: mariko PK11 seems corrupt (size out of bounds)!\n");
+            return 0;
+        }
+        memcpy(out_ctx->pk11, out_ctx->mariko_bl + 0x20 + stage1_hdr_size, out_ctx->pk11_size);
+    } else {
+        BUF_READ(out_ctx->pk11, out_ctx->pk11_size);
+        if (out_ctx->is_modern) {
+            BUF_READ(&out_ctx->pk11_mac, sizeof(out_ctx->pk11_mac));
+        }
+    }
+
+    out_ctx->is_decrypted = out_ctx->pk11->magic == MAGIC_PK11;
+    if (!out_ctx->is_mariko && !out_ctx->is_decrypted) {
+        pk11_t dec_header;
+        aes_ctx_t *crypt_ctx = NULL;
+        if (out_ctx->is_modern) {
+            for (unsigned int i = 6; i < 0x20 && !out_ctx->is_decrypted; i++) {
+                out_ctx->key_rev = i;
+                crypt_ctx = new_aes_ctx(tool_ctx->settings.keyset.package1_keys[i], 0x10, AES_MODE_CBC);
+                aes_setiv(crypt_ctx, out_ctx->stage1.modern.iv, 0x10);
+                aes_decrypt(crypt_ctx, &dec_header, out_ctx->pk11, sizeof(dec_header));
+                if (dec_header.magic == MAGIC_PK11) {
+                    aes_setiv(crypt_ctx, out_ctx->stage1.modern.iv, 0x10);
+                    aes_decrypt(crypt_ctx, out_ctx->pk11, out_ctx->pk11, out_ctx->pk11_size);
+                    out_ctx->is_decrypted = 1;
+                }
+                free_aes_ctx(crypt_ctx);
+                crypt_ctx = NULL;
+            }
+        } else {
+            for (unsigned int i = 0; i < 6 && !out_ctx->is_decrypted; i++) {
+                out_ctx->key_rev = i;
+                crypt_ctx = new_aes_ctx(tool_ctx->settings.keyset.package1_keys[i], 0x10, AES_MODE_CTR);
+                aes_setiv(crypt_ctx, out_ctx->stage1.legacy.ctr, 0x10);
+                aes_decrypt(crypt_ctx, &dec_header, out_ctx->pk11, sizeof(dec_header));
+                if (dec_header.magic == MAGIC_PK11) {
+                    aes_setiv(crypt_ctx, out_ctx->stage1.legacy.ctr, 0x10);
+                    aes_decrypt(crypt_ctx, out_ctx->pk11, out_ctx->pk11, out_ctx->pk11_size);
+                    out_ctx->is_decrypted = 1;
+                }
+                free_aes_ctx(crypt_ctx);
+                crypt_ctx = NULL;
+            }
+        }
+    }
+
+    if (out_ctx->is_decrypted) {
+        uint64_t expected_size = 0x20 + pk11_get_warmboot_bin_size(out_ctx) + pk11_get_nx_bootloader_size(out_ctx) + pk11_get_secmon_size(out_ctx);
+        expected_size = align64(expected_size, 0x10);
+        if (expected_size != out_ctx->pk11_size) {
+            fprintf(stderr, "pk11: PK11 seems corrupt (section sizes don't add up)!\n");
+            return 0;
+        }
+    } else {
+        fprintf(stderr, "pk11: failed to decrypt PK11 body with any known package1_key\n");
+        return 0;
+    }
+
+    return 1;
+#undef BUF_READ
+#undef BUF_REMAINING
+}
+
+void pk11_free_buffer_ctx(pk11_ctx_t *ctx) {
+    if (ctx == NULL) return;
+    if (ctx->pk11 != NULL) {
+        free(ctx->pk11);
+        ctx->pk11 = NULL;
+    }
+    if (ctx->mariko_bl != NULL) {
+        free(ctx->mariko_bl);
+        ctx->mariko_bl = NULL;
+    }
+}
+
 static bool pk21_is_valid_kernel_map(const kernel_map_t *raw_map, uint32_t max_size, uint32_t adj) {
     kernel_map_t adjusted_map = *raw_map;
     adjusted_map.text_start_offset       += adj;

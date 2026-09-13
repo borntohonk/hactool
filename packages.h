@@ -174,6 +174,33 @@ void pk11_process(pk11_ctx_t *ctx);
 void pk11_print(pk11_ctx_t *ctx);
 void pk11_save(pk11_ctx_t *ctx);
 
+/* ── Buffer-based Package1 processing ──────────────────────────────────────
+ * Mirror of pk11_process(), but takes a raw package1 image already sitting
+ * in memory (e.g. extracted from a firmware NCA's RomFS via
+ * nca_extract_romfs_file(ctx, "nx/package1", &size)) instead of reading one
+ * from ctx->file.
+ *
+ * Trial-decrypts the PK11 body against tool_ctx->settings.keyset.package1_keys
+ * (same search this function's FILE-based counterpart performs), just as
+ * pk11_process() does. On success, out_ctx->is_decrypted is set and
+ * out_ctx->pk11 / out_ctx->stage1 / out_ctx->mariko_bl (as applicable) are
+ * populated well enough to hand off to extract_key_sources_from_pk11_ctx().
+ *
+ * out_ctx->file is left NULL — the caller must not call pk11_save()/pk11_print()
+ * on the result. Ownership of any heap buffers stored in out_ctx passes to the
+ * caller; free them with pk11_free_buffer_ctx().
+ *
+ * Returns 1 on success, 0 on failure (buffer too small, bad magic, no matching
+ * package1_key, corrupt PK11). Never calls exit(). */
+int pk11_process_buffer(const unsigned char *data,
+                        size_t               size,
+                        hactool_ctx_t       *tool_ctx,
+                        pk11_ctx_t          *out_ctx);
+
+/* Frees heap buffers allocated by pk11_process_buffer() (out_ctx->pk11 and,
+ * for Mariko images, out_ctx->mariko_bl). Safe to call unconditionally. */
+void pk11_free_buffer_ctx(pk11_ctx_t *ctx);
+
 
 /* Package2 */
 #pragma pack(push, 1)

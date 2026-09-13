@@ -128,8 +128,6 @@ typedef struct {
     unsigned char cli_contentkey[0x10];
     int has_sdseed;
     unsigned char sdseed[0x10];
-    unsigned char keygen_sbk[0x10];
-    unsigned char keygen_tsec[0x10];
     filepath_t section_paths[4];
     filepath_t section_dir_paths[4];
     override_filepath_t exefs_path;

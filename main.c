@@ -17,6 +17,7 @@
 #include "save.h"
 #include "switchfs.h"
 #include "swipc.h"
+#include "keygen_firmware.h"
 #include "nacp.h"
 #include "cnmt.h"
 #include "nsp.h"
@@ -138,8 +139,13 @@ static void usage(void) {
         "  --hekate-out=file  Write Hekate-style text patch for all --patch matches.\n"
         "  --log-out=file     Write JSON log of batch run results (use with --batch).\n"
         "Key Derivation options:\n"
-        "  --sbk=key          Set console unique Secure Boot Key for key derivation.\n"
-        "  --tseckey=key      Set console unique TSEC Key for key derivation.\n"
+        "  -t keygen <firmware_dir> [--keys=keyfile]  Harvest new Master Key Revision keys from a\n"
+        "                                              folder of extracted firmware NCAs and write a\n"
+        "                                              complete keyset to --keys (default: prod.keys,\n"
+        "                                              or dev.keys with -d), creating it if needed.\n"
+        "                                              NOTE: 'keygen' no longer takes a boot0 image;\n"
+        "                                              give it a folder of firmware NCAs instead.\n"
+
         "\n", stderr);
     exit(EXIT_FAILURE);
 }
@@ -214,8 +220,6 @@ int main(int argc, char **argv) {
             {"onlyupdated", 0, NULL, 32},
             {"sdseed", 1, NULL, 33},
             {"sdpath", 1, NULL, 34},
-            {"sbk", 1, NULL, 35},
-            {"tseckey", 1, NULL, 36},
             {"json", 1, NULL, 37},
             {"saveini1json", 0, NULL, 38},
             {"uncompressed", 1, NULL, 39},
@@ -291,8 +295,8 @@ int main(int argc, char **argv) {
                     nca_ctx.tool_ctx->file_type = FILETYPE_SWITCHFS;
                 } else if (!strcmp(optarg, "swipc")) {
                     nca_ctx.tool_ctx->file_type = FILETYPE_SWIPC;
-                } else if (!strcmp(optarg, "keygen") || !strcmp(optarg, "keys") || !strcmp(optarg, "boot0") || !strcmp(optarg, "boot")) {
-                    nca_ctx.tool_ctx->file_type = FILETYPE_BOOT0;
+                } else if (!strcmp(optarg, "keygen") || !strcmp(optarg, "keys")) {
+                    nca_ctx.tool_ctx->file_type = FILETYPE_BOOT0; /* legacy enum name; now the firmware-folder keygen feature */
                 } else if (!strcmp(optarg, "save")) {
                     nca_ctx.tool_ctx->file_type = FILETYPE_SAVE;
                 } else if (!strcmp(optarg, "nacp")) {
@@ -437,12 +441,6 @@ int main(int argc, char **argv) {
                 break;
             case 34:
                 filepath_set(&tool_ctx.settings.nax0_sd_path, optarg);
-                break;
-            case 35:
-                parse_hex_key(nca_ctx.tool_ctx->settings.keygen_sbk, optarg, 16);
-                break;
-            case 36:
-                parse_hex_key(nca_ctx.tool_ctx->settings.keygen_tsec, optarg, 16);
                 break;
             case 37:
                 filepath_set(&tool_ctx.settings.npdm_json_path, optarg);
@@ -921,31 +919,13 @@ int main(int argc, char **argv) {
             xci_process(&xci_ctx);
             break;
         }
-        case FILETYPE_BOOT0: {
-            nca_keyset_t new_keyset;
-            memcpy(&new_keyset, &tool_ctx.settings.keyset, sizeof(new_keyset));
-            for (unsigned int i = 0; i < 0x10; i++) {
-                if (tool_ctx.settings.keygen_sbk[i] != 0) {
-                    memcpy(new_keyset.secure_boot_key, tool_ctx.settings.keygen_sbk, 0x10);
-                }
+        case FILETYPE_BOOT0: { /* legacy enum name; now the firmware-folder keygen feature */
+            if (input_name[0] == '\0') {
+                fprintf(stderr, "Error: -t keygen requires a folder of firmware NCAs, e.g.:\n"
+                                "  hactool -t keygen path_to_firmware_folder --keys path_to_keyfile\n");
+                return EXIT_FAILURE;
             }
-            for (unsigned int i = 0; i < 0x10; i++) {
-                if (tool_ctx.settings.keygen_tsec[i] != 0) {
-                    memcpy(new_keyset.tsec_key, tool_ctx.settings.keygen_tsec, 0x10);
-                }
-            }
-            for (unsigned int i = 0; tool_ctx.file != NULL && i < 0x20; i++) {
-                fseek(tool_ctx.file, 0x180000 + 0x200 * i, SEEK_SET);
-                if (fread(&new_keyset.encrypted_keyblobs[i], sizeof(new_keyset.encrypted_keyblobs[i]), 1, tool_ctx.file) != 1) {
-                    fprintf(stderr, "Error: Failed to read encrypted_keyblob_%02x from boot0!\n", i);
-                    return EXIT_FAILURE;
-                }
-            }
-            printf("Deriving keys...\n");
-            pki_derive_keys(&tool_ctx.settings.keyset, tool_ctx.action & ACTION_DEV);
-            printf("--\n");
-            printf("All derivable keys (using loaded sources):\n\n");
-            pki_print_keys(&new_keyset, tool_ctx.action & ACTION_DEV);
+            keygen_firmware_process(&tool_ctx, input_name, &keypath);
             break;
         }
         case FILETYPE_SAVE: {

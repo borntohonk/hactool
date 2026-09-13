@@ -283,6 +283,67 @@ const char *get_key_revision_summary(uint8_t key_rev) {
     }
 }
 
+/*
+ * Resolves the same search path as open_key_file(), but returns the path
+ * instead of an open handle. If neither the $HOME/.switch/ nor the XDG
+ * candidate exists on disk yet, out is left holding the $HOME/.switch/
+ * candidate (creating a *new* keyfile there is the standard fallback).
+ */
+void get_key_file_path(filepath_t *out, const char *prefix) {
+    filepath_t keypath;
+    filepath_init(&keypath);
+    filepath_init(out);
+
+    char *home = getenv("HOME");
+    if (home == NULL)
+        home = getenv("USERPROFILE");
+    if (home != NULL) {
+        filepath_set(&keypath, home);
+        filepath_append(&keypath, ".switch");
+        filepath_append(&keypath, "%s.keys", prefix);
+    }
+
+    if (keypath.valid == VALIDITY_VALID) {
+        FILE *f = os_fopen(keypath.os_path, OS_MODE_READ);
+        if (f != NULL) {
+            fclose(f);
+            filepath_copy(out, &keypath);
+            return;
+        }
+    }
+
+    filepath_t default_path;
+    filepath_copy(&default_path, &keypath); /* $HOME/.switch/<prefix>.keys, may be invalid */
+
+    char *xdgconfig = getenv("XDG_CONFIG_HOME");
+    if (xdgconfig != NULL)
+        filepath_set(&keypath, xdgconfig);
+    else if (home != NULL) {
+        filepath_set(&keypath, home);
+        filepath_append(&keypath, ".config");
+    }
+    filepath_append(&keypath, "switch");
+    filepath_append(&keypath, "%s.keys", prefix);
+
+    if (keypath.valid == VALIDITY_VALID) {
+        FILE *f = os_fopen(keypath.os_path, OS_MODE_READ);
+        if (f != NULL) {
+            fclose(f);
+            filepath_copy(out, &keypath);
+            return;
+        }
+    }
+
+    /* Neither exists yet: prefer $HOME/.switch/<prefix>.keys as the
+     * location a fresh keyfile should be created at, falling back to
+     * the XDG candidate if $HOME wasn't available at all. */
+    if (default_path.valid == VALIDITY_VALID) {
+        filepath_copy(out, &default_path);
+    } else {
+        filepath_copy(out, &keypath);
+    }
+}
+
 FILE *open_key_file(const char *prefix) {
     filepath_t keypath;
     filepath_init(&keypath);

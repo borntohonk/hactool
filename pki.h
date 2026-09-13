@@ -1,5 +1,6 @@
 #ifndef HACTOOL_PKI_H
 #define HACTOOL_PKI_H
+#include <stdio.h>
 #include <string.h>
 #include "types.h"
 #include "settings.h"
@@ -12,6 +13,11 @@
 
 void pki_derive_keys(nca_keyset_t *keyset, int is_dev);
 void pki_print_keys(nca_keyset_t *keyset, int is_dev);
+/* Same output as pki_print_keys(), but to an arbitrary FILE* instead of
+ * stdout (pki_print_keys() is now a thin wrapper around this with f=stdout).
+ * Used by the keygen firmware feature to render a complete, canonically-
+ * ordered dump of every currently-known key for writing to a keyfile. */
+void pki_fprint_keys(FILE *f, nca_keyset_t *keyset, int is_dev);
 void pki_initialize_keyset(nca_keyset_t *keyset, keyset_variant_t variant);
 
 /* Beta NCA0 helpers */

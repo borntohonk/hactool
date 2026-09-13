@@ -530,7 +530,6 @@ static void derive_complete_master_keys_prod(nca_keyset_t *keyset) {
         memcpy(&keyset->master_keys[i], old_keys[i], 0x10);
     }
 
-    int total = old_count;
     for (int i = 0x09; i < 0x20; i++) {
         if (memcmp(keyset->master_kek_sources[i], zeroes, 0x10) == 0) continue;
 
@@ -540,7 +539,7 @@ static void derive_complete_master_keys_prod(nca_keyset_t *keyset) {
         free_aes_ctx(ctx);
 
         ctx = new_aes_ctx(master_kek, 0x10, AES_MODE_ECB);
-        aes_decrypt(ctx, &keyset->master_keys[total++], keyset->master_key_source, 0x10);
+        aes_decrypt(ctx, &keyset->master_keys[i], keyset->master_key_source, 0x10);
         free_aes_ctx(ctx);
     }
 }
@@ -556,7 +555,6 @@ static void derive_complete_master_keys_dev(nca_keyset_t *keyset) {
         memcpy(&keyset->master_keys_dev[i], old_keys[i], 0x10);
     }
 
-    int total = old_count;
     for (int i = 0x09; i < 0x20; i++) {
         if (memcmp(keyset->master_kek_sources[i], zeroes, 0x10) == 0) continue;
 
@@ -566,7 +564,7 @@ static void derive_complete_master_keys_dev(nca_keyset_t *keyset) {
         free_aes_ctx(ctx);
 
         ctx = new_aes_ctx(master_kek, 0x10, AES_MODE_ECB);
-        aes_decrypt(ctx, &keyset->master_keys_dev[total++], keyset->master_key_source, 0x10);
+        aes_decrypt(ctx, &keyset->master_keys_dev[i], keyset->master_key_source, 0x10);
         free_aes_ctx(ctx);
     }
 }
@@ -698,107 +696,107 @@ void pki_derive_keys(nca_keyset_t *keyset, int is_dev) {
     }
 }
 
-void pki_print_keys(nca_keyset_t *keyset, int is_dev) {
+void pki_fprint_keys(FILE *f, nca_keyset_t *keyset, int is_dev) {
     static const unsigned char zeroes[0x100] = {0};
     #define PRINT_KEY(ky, kn) do { \
         if (memcmp(ky, zeroes, sizeof(ky)) != 0) { \
-            printf("%-32s= ", #kn); \
-            for (unsigned int k_i = 0; k_i < sizeof(ky); k_i++) printf("%02X", ky[k_i]); \
-            printf("\n"); \
+            fprintf(f, "%-32s= ", #kn); \
+            for (unsigned int k_i = 0; k_i < sizeof(ky); k_i++) fprintf(f, "%02X", ky[k_i]); \
+            fprintf(f, "\n"); \
         } \
     } while (0)
     #define PRINT_KEY_IDX(ky, kn, idx) do { \
         if (memcmp(ky, zeroes, sizeof(ky)) != 0) { \
             char KEY_NAME[32]; \
             snprintf(KEY_NAME, sizeof(KEY_NAME), "%s_%02"PRIx32, #kn, idx); \
-            printf("%-32s= ", KEY_NAME); \
-            for (unsigned int k_i = 0; k_i < sizeof(ky); k_i++) printf("%02X", ky[k_i]); \
-            printf("\n"); \
+            fprintf(f, "%-32s= ", KEY_NAME); \
+            for (unsigned int k_i = 0; k_i < sizeof(ky); k_i++) fprintf(f, "%02X", ky[k_i]); \
+            fprintf(f, "\n"); \
         } \
     } while (0)
 
     PRINT_KEY(keyset->secure_boot_key, secure_boot_key);
     PRINT_KEY(keyset->tsec_key, tsec_key);
     PRINT_KEY(keyset->device_key, device_key);
-    printf("\n");
+    fprintf(f, "\n");
 
     PRINT_KEY(keyset->hovi_kek, hovi_kek);
-    printf("\n");
+    fprintf(f, "\n");
 
     if (!is_dev) {
         for (unsigned int i = 0; i < 3; i++) PRINT_KEY_IDX(keyset->tsec_root_kek_variants[i],    tsec_root_kek,    i);
         for (unsigned int i = 0; i < 3; i++) PRINT_KEY_IDX(keyset->package1_kek_variants[i],     package1_kek,     i);
         for (unsigned int i = 0; i < 3; i++) PRINT_KEY_IDX(keyset->package1_mac_kek_variants[i], package1_mac_kek, i);
-        printf("\n");
+        fprintf(f, "\n");
     } else {
         for (unsigned int i = 0; i < 3; i++) PRINT_KEY_IDX(keyset->tsec_root_kek_variants_dev[i],    tsec_root_kek_dev,    i);
         for (unsigned int i = 0; i < 3; i++) PRINT_KEY_IDX(keyset->package1_kek_variants_dev[i],     package1_kek_dev,     i);
         for (unsigned int i = 0; i < 3; i++) PRINT_KEY_IDX(keyset->package1_mac_kek_variants_dev[i], package1_mac_kek_dev, i);
-        printf("\n");
+        fprintf(f, "\n");
     }
 
     for (unsigned int i = 0; i < 3; i++) PRINT_KEY_IDX(keyset->tsec_auth_signatures[i], tsec_auth_signature, i);
-    printf("\n");
+    fprintf(f, "\n");
 
     if (!is_dev) {
         for (unsigned int i = 0; i < 3; i++) PRINT_KEY_IDX(keyset->tsec_root_keys[i],    tsec_root_key,    i);
         for (unsigned int i = 6; i < 9; i++) PRINT_KEY_IDX(keyset->package1_keys[i],     package1_key,     i);
         for (unsigned int i = 6; i < 9; i++) PRINT_KEY_IDX(keyset->package1_mac_keys[i], package1_mac_key, i);
-        printf("\n");
+        fprintf(f, "\n");
     } else {
         for (unsigned int i = 0; i < 3; i++) PRINT_KEY_IDX(keyset->tsec_root_keys_dev[i],    tsec_root_key_dev,    i);
         for (unsigned int i = 6; i < 9; i++) PRINT_KEY_IDX(keyset->package1_keys_dev[i],     package1_key_dev,     i);
         for (unsigned int i = 6; i < 9; i++) PRINT_KEY_IDX(keyset->package1_mac_keys_dev[i], package1_mac_key_dev, i);
-        printf("\n");
+        fprintf(f, "\n");
     }
 
     PRINT_KEY(keyset->keyblob_mac_key_source, keyblob_mac_key_source);
     for (unsigned int i = 0; i < 6; i++) PRINT_KEY_IDX(keyset->keyblob_key_sources[i],  keyblob_key_source,  i);
-    printf("\n");
+    fprintf(f, "\n");
     for (unsigned int i = 0; i < 6; i++) PRINT_KEY_IDX(keyset->keyblob_keys[i],         keyblob_key,         i);
-    printf("\n");
+    fprintf(f, "\n");
     for (unsigned int i = 0; i < 6; i++) PRINT_KEY_IDX(keyset->keyblob_mac_keys[i],     keyblob_mac_key,     i);
-    printf("\n");
+    fprintf(f, "\n");
     for (unsigned int i = 0; i < 6; i++) PRINT_KEY_IDX(keyset->encrypted_keyblobs[i],   encrypted_keyblob,   i);
-    printf("\n");
+    fprintf(f, "\n");
     for (unsigned int i = 0; i < 6; i++) PRINT_KEY_IDX(keyset->keyblobs[i],             keyblob,             i);
-    printf("\n");
+    fprintf(f, "\n");
 
     for (unsigned int i = 0x08; i < 0x20; i++) PRINT_KEY_IDX(keyset->master_kek_sources[i], master_kek_source, i);
-    printf("\n");
+    fprintf(f, "\n");
 
     if (!is_dev) {
         PRINT_KEY(keyset->mariko_kek, mariko_kek);
         PRINT_KEY(keyset->mariko_bek, mariko_bek);
         for (unsigned int i = 0; i < 0xC; i++) PRINT_KEY_IDX(keyset->mariko_aes_class_keys[i], mariko_aes_class_key, i);
-        printf("\n");
+        fprintf(f, "\n");
         for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->mariko_master_kek_sources[i], mariko_master_kek_source, i);
-        printf("\n");
+        fprintf(f, "\n");
         for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->master_keks[i], master_kek, i);
-        printf("\n");
+        fprintf(f, "\n");
     }
 
     PRINT_KEY(keyset->master_key_source, master_key_source);
-    printf("\n");
+    fprintf(f, "\n");
     if (!is_dev) {
         for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->master_keys[i],     master_key,     i);
     } else {
         for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->master_keys_dev[i], master_key_dev, i);
     }
-    printf("\n");
+    fprintf(f, "\n");
 
     PRINT_KEY(keyset->package2_key_source, package2_key_source);
-    printf("\n");
+    fprintf(f, "\n");
     for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->package2_keys[i], package2_key, i);
-    printf("\n");
+    fprintf(f, "\n");
 
     PRINT_KEY(keyset->per_console_key_source,              per_console_key_source);
     PRINT_KEY(keyset->aes_kek_generation_source,           aes_kek_generation_source);
     PRINT_KEY(keyset->aes_key_generation_source,           aes_key_generation_source);
     PRINT_KEY(keyset->titlekek_source,                     titlekek_source);
-    printf("\n");
+    fprintf(f, "\n");
     for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->titlekeks[i], titlekek, i);
-    printf("\n");
+    fprintf(f, "\n");
 
     PRINT_KEY(keyset->key_area_key_application_source, key_area_key_application_source);
     PRINT_KEY(keyset->key_area_key_ocean_source,       key_area_key_ocean_source);
@@ -809,23 +807,27 @@ void pki_print_keys(nca_keyset_t *keyset, int is_dev) {
     PRINT_KEY(keyset->save_mac_kek_source,             save_mac_kek_source);
     PRINT_KEY(keyset->save_mac_key_source,             save_mac_key_source);
     PRINT_KEY(keyset->save_mac_key,                    save_mac_key);
-    printf("\n");
+    fprintf(f, "\n");
 
     PRINT_KEY(keyset->header_kek_source,  header_kek_source);
     PRINT_KEY(keyset->header_key_source,  header_key_source);
     PRINT_KEY(keyset->header_kek,         header_kek);
     PRINT_KEY(keyset->header_key,         header_key);
-    printf("\n");
+    fprintf(f, "\n");
 
     for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->key_area_keys[i][0], key_area_key_application, i);
-    printf("\n");
+    fprintf(f, "\n");
     for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->key_area_keys[i][1], key_area_key_ocean, i);
-    printf("\n");
+    fprintf(f, "\n");
     for (unsigned int i = 0; i < 0x20; i++) PRINT_KEY_IDX(keyset->key_area_keys[i][2], key_area_key_system, i);
-    printf("\n");
+    fprintf(f, "\n");
 
     #undef PRINT_KEY_IDX
     #undef PRINT_KEY
+}
+
+void pki_print_keys(nca_keyset_t *keyset, int is_dev) {
+    pki_fprint_keys(stdout, keyset, is_dev);
 }
 
 void pki_initialize_keyset(nca_keyset_t *keyset, keyset_variant_t variant) {
