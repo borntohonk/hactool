@@ -51,7 +51,7 @@ int os_rmdir(const oschar_t *dir) {
 }
 
 static void filepath_update(filepath_t *fpath) {
-    memset(fpath->os_path, 0, MAX_PATH * sizeof(oschar_t));
+    memset(fpath->os_path, 0, HACTOOL_MAX_PATH * sizeof(oschar_t));
     os_strcpy(fpath->os_path, fpath->char_path);
 }
 
@@ -67,13 +67,13 @@ void filepath_copy(filepath_t *fpath, filepath_t *copy) {
 }
 
 void filepath_append(filepath_t *fpath, const char *format, ...) {
-    char tmppath[MAX_PATH];
+    char tmppath[HACTOOL_MAX_PATH];
     va_list args;
 
     if (fpath->valid == VALIDITY_INVALID)
         return;
 
-    memset(tmppath, 0, MAX_PATH);
+    memset(tmppath, 0, HACTOOL_MAX_PATH);
 
     va_start(args, format);
     vsnprintf(tmppath, sizeof(tmppath), format, args);
@@ -85,13 +85,13 @@ void filepath_append(filepath_t *fpath, const char *format, ...) {
 }
 
 void filepath_append_n(filepath_t *fpath, uint32_t n, const char *format, ...) {
-    char tmppath[MAX_PATH];
+    char tmppath[HACTOOL_MAX_PATH];
     va_list args;
 
-    if (fpath->valid == VALIDITY_INVALID || n > MAX_PATH)
+    if (fpath->valid == VALIDITY_INVALID || n > HACTOOL_MAX_PATH)
         return;
 
-    memset(tmppath, 0, MAX_PATH);
+    memset(tmppath, 0, HACTOOL_MAX_PATH);
 
     va_start(args, format);
     vsnprintf(tmppath, sizeof(tmppath), format, args);
@@ -104,9 +104,9 @@ void filepath_append_n(filepath_t *fpath, uint32_t n, const char *format, ...) {
 
 void filepath_set(filepath_t *fpath, const char *path) {
     size_t len = strlen(path);
-    if (len < MAX_PATH) {
+    if (len < HACTOOL_MAX_PATH) {
         fpath->valid = VALIDITY_VALID;
-        memset(fpath->char_path, 0, MAX_PATH);
+        memset(fpath->char_path, 0, HACTOOL_MAX_PATH);
         memcpy(fpath->char_path, path, len);
         filepath_update(fpath);
     } else {
@@ -120,10 +120,10 @@ void filepath_set_format(filepath_t *fpath, const char *format, ...) {
     if (fpath->valid == VALIDITY_INVALID)
         return;
 
-    memset(fpath->char_path, 0, MAX_PATH);
+    memset(fpath->char_path, 0, HACTOOL_MAX_PATH);
 
     va_start(args, format);
-    vsnprintf(fpath->char_path, MAX_PATH, format, args);
+    vsnprintf(fpath->char_path, HACTOOL_MAX_PATH, format, args);
     va_end(args);
 
     filepath_update(fpath);

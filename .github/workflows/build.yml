@@ -1,27 +1,32 @@
-on:
-  push:
-  pull_request:
-  workflow_dispatch:
+on: [push, pull_request]
 
 jobs:
   main:
     strategy:
       fail-fast: false
       matrix:
-        job_name: ['linux', 'windows', 'macos']
+        job_name: ['linux', 'windows', 'macos-arm64', 'macos-intel']
 
         include:
-        - job_name: linux
-          os: ubuntu-latest
-          shell: bash {0}
+          - job_name: linux
+            os: ubuntu-latest
+            shell: bash {0}
+            platform: linux
 
-        - job_name: windows
-          os: windows-latest
-          shell: msys2 {0}
+          - job_name: windows
+            os: windows-latest
+            shell: msys2 {0}
+            platform: windows
 
-        - job_name: macos
-          os: macos-15-intel
-          shell: bash {0}
+          - job_name: macos-arm64
+            os: macos-latest
+            shell: bash {0}
+            platform: macos
+
+          - job_name: macos-intel
+            os: macos-15-intel
+            shell: bash {0}
+            platform: macos
 
     defaults:
       run:
@@ -31,71 +36,67 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: msys2/setup-msys2@v2
-      if: matrix.os == 'windows-latest'
-      with:
-        path-type: inherit
-        msystem: MINGW64
-        update: true
-        install: mingw-w64-x86_64-gcc mingw-w64-x86_64-make mingw-w64-x86_64-capstone
+      - name: Install build tools (Linux)
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake
 
-    - name: Checkout capstone
-      uses: actions/checkout@v7
-      with:
-        fetch-tags: true
-        repository: capstone-engine/capstone
-        path: capstone
-        ref: 5.0.9
-        submodules: recursive
+      - uses: msys2/setup-msys2@v2
+        if: matrix.platform == 'windows'
+        with:
+          path-type: inherit
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-make mingw-w64-x86_64-cmake git
 
-    - name: Build and install Capstone 5.0.9
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        sudo apt-get update && sudo apt-get install -y cmake build-essential
-        cd capstone
-        ./make.sh
-        sudo ./make.sh install
+      - name: Install build tools (macOS)
+        if: matrix.platform == 'macos'
+        env:
+          HOMEBREW_NO_REQUIRE_TAP_TRUST: 1
+        run: brew install cmake
 
-    - name: Install capstone (macOS)
-      if: matrix.os == 'macos-15-intel'
-      env:
-        HOMEBREW_NO_REQUIRE_TAP_TRUST: 1
-      run: brew install capstone
+      - uses: actions/checkout@v7
 
-    - uses: actions/checkout@v7
+      - name: Build static, AArch64-only capstone from source
+        run: |
+          git clone --depth 1 --branch 5.0.9 https://github.com/capstone-engine/capstone capstone-src
+          cmake -S capstone-src -B capstone-src/build \
+            -DCAPSTONE_BUILD_SHARED_LIBS=OFF \
+            -DCAPSTONE_BUILD_CSTOOL=OFF \
+            -DCAPSTONE_ARCHITECTURE_DEFAULT=OFF \
+            -DCAPSTONE_ARM64_SUPPORT=ON \
+            -DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections" \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build capstone-src/build -j$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)
 
-    - run: mv config.mk.template config.mk
+      - run: mv config.mk.template config.mk
 
-    - name: Static link capstone (Linux)
-      if: matrix.os == 'ubuntu-latest'
-      run: sed -i 's/-lcapstone/-L\/usr\/local\/lib -Wl,-Bstatic -lcapstone -Wl,-Bdynamic/' config.mk
+      - name: Configure build (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          {
+            echo "CFLAGS += -I${{ github.workspace }}/capstone-src/include -ffunction-sections -fdata-sections"
+            echo "LDFLAGS += -L${{ github.workspace }}/capstone-src/build -Wl,-Bstatic -lcapstone -Wl,-Bdynamic -s -Wl,--gc-sections"
+          } >> config.mk
 
-    - name: Add capstone paths (macOS)
-      if: matrix.os == 'macos-15-intel'
-      run: |
-        CAPSTONE_PREFIX="$(brew --prefix capstone)"
-        test -f "${CAPSTONE_PREFIX}/lib/libcapstone.a"
-        echo "CAPSTONE_CFLAGS += -I${CAPSTONE_PREFIX}/include" >> config.mk
-        echo "CAPSTONE_LIBS = ${CAPSTONE_PREFIX}/lib/libcapstone.a" >> config.mk
+      - name: Configure build (macOS)
+        if: matrix.platform == 'macos'
+        run: |
+          {
+            echo "CFLAGS += -I${{ github.workspace }}/capstone-src/include -ffunction-sections -fdata-sections"
+            echo "LDFLAGS += -L${{ github.workspace }}/capstone-src/build -lcapstone -Wl,-dead_strip -s"
+          } >> config.mk
 
-    - name: Build macOS Intel x86_64
-      if: matrix.os == 'macos-15-intel'
-      run: make macos-x86
+      - name: Configure build (Windows)
+        if: matrix.platform == 'windows'
+        run: |
+          {
+            echo "CFLAGS += -I${{ github.workspace }}/capstone-src/include -ffunction-sections -fdata-sections"
+            echo "LDFLAGS += -L${{ github.workspace }}/capstone-src/build -lcapstone -static -s -Wl,--gc-sections"
+          } >> config.mk
 
-    - name: Verify macOS artifact is self-contained
-      if: matrix.os == 'macos-15-intel'
-      run: |
-        if otool -L hactool | grep -qi capstone; then
-          echo "hactool still has a dynamic Capstone dependency"
-          otool -L hactool
-          exit 1
-        fi
+      - run: make -j$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)
 
-    - name: Build Unix target
-      if: matrix.os != 'macos-15-intel'
-      run: make -j$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)
-
-    - uses: actions/upload-artifact@v7
-      with:
-        name: hactool-${{ matrix.job_name }}
-        path: hactool*
+      - uses: actions/upload-artifact@v7
+        with:
+          name: hactool-${{ matrix.job_name }}
+          path: hactool*

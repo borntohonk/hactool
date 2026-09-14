@@ -40,7 +40,8 @@ static void usage(void) {
         "  -r, --raw          Keep raw data, don't unpack.\n"
         "  -y, --verify       Verify hashes and signatures.\n"
         "  -d, --dev          Decrypt with development keys instead of retail.\n"
-        "  -k, --keyset       Load keys from an external file.\n"
+        "  -k, --keyset       Load keys from an external file (input only).\n"
+        "  --keys=file        Keygen output path (write destination; not the same as --keyset).\n"
         "  -t, --intype=type  Specify input file type [nca, xci, pfs0, romfs, hfs0, npdm, pk11, pk21, ini1, kip1, nax0, save, switchfs, swipc, keygen, nsp, nacp, cnmt, findpatterns]\n"
         "  --titlekey=key     Set title key for Rights ID crypto titles.\n"
         "  --contentkey=key   Set raw key for NCA body decryption.\n"
@@ -139,10 +140,12 @@ static void usage(void) {
         "  --hekate-out=file  Write Hekate-style text patch for all --patch matches.\n"
         "  --log-out=file     Write JSON log of batch run results (use with --batch).\n"
         "Key Derivation options:\n"
-        "  -t keygen <firmware_dir> [--keys=keyfile]  Harvest new Master Key Revision keys from a\n"
+        "  -t keygen <firmware_dir> [--keys=outfile]  Harvest new Master Key Revision keys from a\n"
         "                                              folder of extracted firmware NCAs and write a\n"
         "                                              complete keyset to --keys (default: prod.keys,\n"
         "                                              or dev.keys with -d), creating it if needed.\n"
+        "                                              --keys is the write destination only.\n"
+        "                                              -k/--keyset is the input keyset to load, if any.\n"
         "                                              NOTE: 'keygen' no longer takes a boot0 image;\n"
         "                                              give it a folder of firmware NCAs instead.\n"
 
@@ -155,7 +158,8 @@ int main(int argc, char **argv) {
     hactool_ctx_t base_ctx; /* Context for base NCA, if used. */
     nca_ctx_t nca_ctx;
     char input_name[0x200];
-    filepath_t keypath;
+    filepath_t keypath;       /* -k / --keyset : INPUT keyset to load */
+    filepath_t keys_out_path; /* --keys        : OUTPUT path for keygen write only */
 
     prog_name = (argc < 1) ? "hactool" : argv[0];
 
@@ -164,6 +168,7 @@ int main(int argc, char **argv) {
     memset(&base_ctx, 0, sizeof(base_ctx));
     memset(input_name, 0, sizeof(input_name));
     filepath_init(&keypath);
+    filepath_init(&keys_out_path);
     nca_ctx.tool_ctx = &tool_ctx;
     nca_ctx.is_cli_target = true;
 
@@ -184,6 +189,10 @@ int main(int argc, char **argv) {
             {"verify", 0, NULL, 'y'},
             {"raw", 0, NULL, 'r'},
             {"intype", 1, NULL, 't'},
+            /* --keys before --keyset: MinGW getopt can treat "keys" as an
+             * ambiguous abbreviation of "keyset" and drop it. --keys = OUTPUT
+             * only. -k/--keyset = INPUT only. They are not the same option. */
+            {"keys",   1, NULL, 53},
             {"keyset", 1, NULL, 'k'},
             {"section0", 1, NULL, 0},
             {"section1", 1, NULL, 1},
@@ -262,6 +271,8 @@ int main(int argc, char **argv) {
                 nca_ctx.tool_ctx->action |= ACTION_DEV;
                 break;
             case 'k':
+                /* INPUT only: path used to load an existing keyset at startup.
+                 * This is not the keygen output path; that is --keys. */
                 filepath_set(&keypath, optarg);
                 break;
             case 't':
@@ -585,9 +596,30 @@ int main(int argc, char **argv) {
                 nca_ctx.tool_ctx->settings.fp_log_path.enabled = 1;
                 filepath_set(&nca_ctx.tool_ctx->settings.fp_log_path.path, optarg);
                 break;
+            case 53:
+                /* OUTPUT only: destination file for keygen's complete keyset write.
+                 * Distinct from -k/--keyset (input). Must work the same on Windows
+                 * and Linux; do not treat as an abbreviation of --keyset. */
+                filepath_set(&keys_out_path, optarg);
+                break;
             default:
                 usage();
                 return EXIT_FAILURE;
+        }
+    }
+
+    /* --keys is OUTPUT only (never -k/--keyset). Always re-read it from
+     * argv after getopt. MinGW getopt_long can accept --keys in a way that
+     * does not set case 53, while glibc does. Unconditional argv scan makes
+     * Windows match Linux: write destination is whatever follows --keys. */
+    for (int ai = 1; ai < argc; ai++) {
+        if (strcmp(argv[ai], "--keys") == 0 && ai + 1 < argc) {
+            filepath_set(&keys_out_path, argv[ai + 1]);
+            break;
+        }
+        if (strncmp(argv[ai], "--keys=", 7) == 0) {
+            filepath_set(&keys_out_path, argv[ai] + 7);
+            break;
         }
     }
 
@@ -925,7 +957,9 @@ int main(int argc, char **argv) {
                                 "  hactool -t keygen path_to_firmware_folder --keys path_to_keyfile\n");
                 return EXIT_FAILURE;
             }
-            keygen_firmware_process(&tool_ctx, input_name, &keypath);
+            /* Pass --keys output path only. -k/--keyset remains the input loader
+             * handled earlier; it must not be reused as the write destination. */
+            keygen_firmware_process(&tool_ctx, input_name, &keys_out_path);
             break;
         }
         case FILETYPE_SAVE: {

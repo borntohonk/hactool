@@ -145,33 +145,94 @@ static void keygen_hex_encode(char *dst, const unsigned char *data, size_t len) 
 }
 
 /* Renders pki_fprint_keys()'s complete, canonically-ordered dump of the
- * current keyset (every static key it knows: secure_boot_key, hovi_kek,
- * tsec/package1 KEK+key families, keyblob sources, the master_kek_source /
- * master_kek / master_key / package2_key / titlekek / key_area_key chains
- * across all revisions, header keys, sd/save keys, etc — not just the
- * per-revision chain this feature derives) into a heap buffer.
- * Returns NULL on failure; caller frees the result. *out_len excludes the
- * NUL terminator. */
+ * current keyset into a heap buffer. Returns NULL on failure; caller frees
+ * the result. *out_len excludes the NUL terminator.
+ *
+ * Windows: CRT tmpfile() and a single GetTempFileNameA(NULL) path both fail
+ * often (TEMP permissions, AV locks, cross-CRT differences). Try several
+ * backends before giving up. */
 static char *keygen_render_keyset(nca_keyset_t *keyset, int is_dev, size_t *out_len) {
-    FILE *tmp = tmpfile();
-    if (tmp == NULL) return NULL;
+    FILE *tmp = NULL;
+    int owns_named_file = 0;
+#ifdef _WIN32
+    char temp_path[MAX_PATH];
+    temp_path[0] = '\0';
+
+    /* 1) System TEMP via GetTempPath + GetTempFileName */
+    {
+        char dir[MAX_PATH];
+        DWORD n = GetTempPathA(MAX_PATH, dir);
+        if (n > 0 && n < MAX_PATH && GetTempFileNameA(dir, "hct", 0, temp_path) != 0) {
+            tmp = fopen(temp_path, "w+b");
+            if (tmp != NULL) {
+                owns_named_file = 1;
+            } else {
+                DeleteFileA(temp_path);
+                temp_path[0] = '\0';
+            }
+        }
+    }
+
+    /* 2) File in the current working directory */
+    if (tmp == NULL) {
+        snprintf(temp_path, sizeof(temp_path), "hactool_keygen_%u.tmp",
+                 (unsigned)GetCurrentProcessId());
+        tmp = fopen(temp_path, "w+b");
+        if (tmp != NULL) {
+            owns_named_file = 1;
+        } else {
+            temp_path[0] = '\0';
+        }
+    }
+
+    /* 3) Last resort: CRT tmpfile() */
+    if (tmp == NULL) {
+        tmp = tmpfile();
+        owns_named_file = 0;
+    }
+#else
+    tmp = tmpfile();
+#endif
+    if (tmp == NULL) {
+        fprintf(stderr, "[keygen] Error: unable to create a temporary stream to render the keyset\n");
+        return NULL;
+    }
 
     pki_fprint_keys(tmp, keyset, is_dev);
+    fflush(tmp);
 
     long len = ftell(tmp);
-    if (len < 0) { fclose(tmp); return NULL; }
+    if (len < 0) {
+        fclose(tmp);
+#ifdef _WIN32
+        if (owns_named_file && temp_path[0] != '\0') DeleteFileA(temp_path);
+#endif
+        return NULL;
+    }
     rewind(tmp);
 
     char *buf = malloc((size_t)len + 1);
-    if (buf == NULL) { fclose(tmp); return NULL; }
+    if (buf == NULL) {
+        fclose(tmp);
+#ifdef _WIN32
+        if (owns_named_file && temp_path[0] != '\0') DeleteFileA(temp_path);
+#endif
+        return NULL;
+    }
 
     if (len > 0 && fread(buf, 1, (size_t)len, tmp) != (size_t)len) {
         free(buf);
         fclose(tmp);
+#ifdef _WIN32
+        if (owns_named_file && temp_path[0] != '\0') DeleteFileA(temp_path);
+#endif
         return NULL;
     }
     buf[len] = '\0';
     fclose(tmp);
+#ifdef _WIN32
+    if (owns_named_file && temp_path[0] != '\0') DeleteFileA(temp_path);
+#endif
 
     if (out_len != NULL) *out_len = (size_t)len;
     return buf;
@@ -204,7 +265,12 @@ static size_t keygen_line_key_name(const char *line, char *dst, size_t dst_size)
  * marker. Lines whose name IS covered are dropped from the preserved set —
  * they're already present (possibly re-cased/re-derived) in `dump`, so
  * keeping the old copy too would just create a duplicate/conflicting entry
- * for the same key. Returns the number of custom lines preserved. */
+ * for the same key.
+ *
+ * Returns:
+ *   >= 0  number of custom lines preserved (success, even if 0)
+ *   -1    open or write failure (error already printed to stderr)
+ */
 static int keygen_write_keyset_dump(filepath_t *out_path, const char *dump, size_t dump_len) {
     char *existing = NULL;
     long  existing_len = 0;
@@ -229,13 +295,15 @@ static int keygen_write_keyset_dump(filepath_t *out_path, const char *dump, size
         fclose(rf);
     }
 
-    /* Best-effort: ensure the parent directory exists (matters only the
-     * first time a fresh default keyfile is created). */
+    /* Best-effort: ensure the parent directory exists (e.g. %USERPROFILE%\.switch
+     * on Windows when creating a fresh default keyfile). */
     {
         char tmp[MAX_PATH];
         strncpy(tmp, out_path->char_path, sizeof(tmp) - 1);
         tmp[sizeof(tmp) - 1] = '\0';
         char *sep = strrchr(tmp, PATH_SEPERATOR);
+        if (sep == NULL)
+            sep = strrchr(tmp, '/');
         if (sep != NULL) {
             *sep = '\0';
             if (tmp[0] != '\0') {
@@ -244,19 +312,34 @@ static int keygen_write_keyset_dump(filepath_t *out_path, const char *dump, size
                 filepath_set(&dir_path, tmp);
                 if (dir_path.valid == VALIDITY_VALID) {
                     os_makedir(dir_path.os_path);
+#ifdef _WIN32
+                    CreateDirectoryA(tmp, NULL);
+#endif
                 }
             }
         }
     }
 
     FILE *wf = os_fopen(out_path->os_path, OS_MODE_WRITE);
+#ifdef _WIN32
+    /* Some MinGW/Windows setups fail _wfopen on simple relative paths even
+     * when the UTF-16 conversion succeeded. Fall back to narrow fopen. */
+    if (wf == NULL && out_path->char_path[0] != '\0') {
+        wf = fopen(out_path->char_path, "wb");
+    }
+#endif
     if (wf == NULL) {
         fprintf(stderr, "[keygen] Error: failed to open %s for writing\n", out_path->char_path);
         free(existing);
-        return 0;
+        return -1;
     }
 
-    fwrite(dump, 1, dump_len, wf);
+    if (fwrite(dump, 1, dump_len, wf) != dump_len) {
+        fprintf(stderr, "[keygen] Error: failed to write keyset data to %s\n", out_path->char_path);
+        fclose(wf);
+        free(existing);
+        return -1;
+    }
 
     /* Carry over any pre-existing line whose key name isn't part of the
      * standard schema pki_fprint_keys() just rendered (e.g. hand-added
@@ -321,13 +404,23 @@ static int keygen_write_keyset_dump(filepath_t *out_path, const char *dump, size
         }
 
         if (preserved > 0 && carried != NULL) {
-            fprintf(wf, "\n# Preserved from previous %s (not part of the standard key schema):\n", out_path->char_path);
-            fwrite(carried, 1, carried_len, wf);
+            if (fprintf(wf, "\n# Preserved from previous %s (not part of the standard key schema):\n", out_path->char_path) < 0 ||
+                fwrite(carried, 1, carried_len, wf) != carried_len) {
+                fprintf(stderr, "[keygen] Error: failed to write preserved lines to %s\n", out_path->char_path);
+                free(carried);
+                fclose(wf);
+                free(existing);
+                return -1;
+            }
         }
         free(carried);
     }
 
-    fclose(wf);
+    if (fclose(wf) != 0) {
+        fprintf(stderr, "[keygen] Error: failed to close %s after writing\n", out_path->char_path);
+        free(existing);
+        return -1;
+    }
     free(existing);
     return preserved;
 }
@@ -368,6 +461,11 @@ static void keygen_write_full_keyset(hactool_ctx_t *tool_ctx, filepath_t *out_pa
 
     int preserved = keygen_write_keyset_dump(out_path, dump, dump_len);
     free(dump);
+
+    if (preserved < 0) {
+        /* Error already reported by keygen_write_keyset_dump. Do not claim success. */
+        return;
+    }
 
     if (preserved > 0) {
         printf("[keygen] Wrote complete keyset to %s (%d pre-existing custom line(s) preserved)\n", out_path->char_path, preserved);
@@ -464,8 +562,10 @@ void keygen_firmware_process(hactool_ctx_t *tool_ctx, const char *input_dir, fil
         return;
     }
 
-    /* Resolve the output keyfile: explicit -k/--keyset path if given, else
-     * the default $HOME/.switch/<prod|dev>.keys location. */
+    /* Resolve the output keyfile: explicit --keys path if given, else the
+     * default $HOME/.switch/<prod|dev>.keys location. cli_keypath is the
+     * --keys OUTPUT path only; -k/--keyset is the INPUT loader handled in
+     * main() and must not be used here as the write destination. */
     filepath_t out_path;
     if (cli_keypath != NULL && cli_keypath->valid == VALIDITY_VALID) {
         filepath_copy(&out_path, cli_keypath);
@@ -474,6 +574,12 @@ void keygen_firmware_process(hactool_ctx_t *tool_ctx, const char *input_dir, fil
     }
     if (out_path.valid != VALIDITY_VALID) {
         filepath_set(&out_path, "prod.keys");
+    }
+    /* Visible on both platforms: confirms whether --keys reached keygen. */
+    if (cli_keypath != NULL && cli_keypath->valid == VALIDITY_VALID) {
+        printf("[keygen] Using --keys output path: %s\n", out_path.char_path);
+    } else {
+        printf("[keygen] --keys not provided or not applied; default output path: %s\n", out_path.char_path);
     }
 
     /* Highest master key revision already present in the loaded keyset,

@@ -25,8 +25,8 @@ typedef char oschar_t; /* utf-8 */
 #endif
 
 typedef struct filepath {
-    char char_path[MAX_PATH];
-    oschar_t os_path[MAX_PATH];
+    char char_path[HACTOOL_MAX_PATH];
+    oschar_t os_path[HACTOOL_MAX_PATH];
     validity_t valid;
 } filepath_t;
 

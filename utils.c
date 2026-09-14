@@ -284,19 +284,42 @@ const char *get_key_revision_summary(uint8_t key_rev) {
 }
 
 /*
+ * Pick a usable home directory for key files.
+ * On Windows, prefer USERPROFILE: MinGW/MSYS often set HOME to a Unix-style
+ * path (/c/Users/...) that _wfopen cannot open. Linux keeps HOME first.
+ */
+static const char *keyfile_home_dir(void) {
+#ifdef _WIN32
+    const char *p = getenv("USERPROFILE");
+    if (p != NULL && p[0] != '\0')
+        return p;
+    p = getenv("HOME");
+    if (p != NULL && p[0] != '\0') {
+        /* Accept only Windows-looking paths from HOME */
+        if (strchr(p, ':') != NULL || (p[0] == '\\' && p[1] == '\\'))
+            return p;
+    }
+    return NULL;
+#else
+    const char *p = getenv("HOME");
+    if (p != NULL && p[0] != '\0')
+        return p;
+    return getenv("USERPROFILE");
+#endif
+}
+
+/*
  * Resolves the same search path as open_key_file(), but returns the path
- * instead of an open handle. If neither the $HOME/.switch/ nor the XDG
- * candidate exists on disk yet, out is left holding the $HOME/.switch/
- * candidate (creating a *new* keyfile there is the standard fallback).
+ * instead of an open handle. If neither the home/.switch/ nor the XDG
+ * candidate exists on disk yet, out holds the home/.switch/ candidate
+ * (creating a new keyfile there is the standard fallback).
  */
 void get_key_file_path(filepath_t *out, const char *prefix) {
     filepath_t keypath;
     filepath_init(&keypath);
     filepath_init(out);
 
-    char *home = getenv("HOME");
-    if (home == NULL)
-        home = getenv("USERPROFILE");
+    const char *home = keyfile_home_dir();
     if (home != NULL) {
         filepath_set(&keypath, home);
         filepath_append(&keypath, ".switch");
@@ -310,20 +333,33 @@ void get_key_file_path(filepath_t *out, const char *prefix) {
             filepath_copy(out, &keypath);
             return;
         }
+#ifdef _WIN32
+        f = fopen(keypath.char_path, "rb");
+        if (f != NULL) {
+            fclose(f);
+            filepath_copy(out, &keypath);
+            return;
+        }
+#endif
     }
 
     filepath_t default_path;
-    filepath_copy(&default_path, &keypath); /* $HOME/.switch/<prefix>.keys, may be invalid */
+    filepath_init(&default_path);
+    if (keypath.valid == VALIDITY_VALID)
+        filepath_copy(&default_path, &keypath);
 
+    filepath_init(&keypath);
     char *xdgconfig = getenv("XDG_CONFIG_HOME");
-    if (xdgconfig != NULL)
+    if (xdgconfig != NULL && xdgconfig[0] != '\0') {
         filepath_set(&keypath, xdgconfig);
-    else if (home != NULL) {
+        filepath_append(&keypath, "switch");
+        filepath_append(&keypath, "%s.keys", prefix);
+    } else if (home != NULL) {
         filepath_set(&keypath, home);
         filepath_append(&keypath, ".config");
+        filepath_append(&keypath, "switch");
+        filepath_append(&keypath, "%s.keys", prefix);
     }
-    filepath_append(&keypath, "switch");
-    filepath_append(&keypath, "%s.keys", prefix);
 
     if (keypath.valid == VALIDITY_VALID) {
         FILE *f = os_fopen(keypath.os_path, OS_MODE_READ);
@@ -334,12 +370,10 @@ void get_key_file_path(filepath_t *out, const char *prefix) {
         }
     }
 
-    /* Neither exists yet: prefer $HOME/.switch/<prefix>.keys as the
-     * location a fresh keyfile should be created at, falling back to
-     * the XDG candidate if $HOME wasn't available at all. */
+    /* Neither exists yet: prefer home/.switch/<prefix>.keys */
     if (default_path.valid == VALIDITY_VALID) {
         filepath_copy(out, &default_path);
-    } else {
+    } else if (keypath.valid == VALIDITY_VALID) {
         filepath_copy(out, &keypath);
     }
 }
@@ -347,10 +381,8 @@ void get_key_file_path(filepath_t *out, const char *prefix) {
 FILE *open_key_file(const char *prefix) {
     filepath_t keypath;
     filepath_init(&keypath);
-    /* Use $HOME/.switch/prod.keys if it exists */
-    char *home = getenv("HOME");
-    if (home == NULL)
-        home = getenv("USERPROFILE");
+    /* Use <home>/.switch/prod.keys if it exists (USERPROFILE on Windows) */
+    const char *home = keyfile_home_dir();
     if (home != NULL) {
         filepath_set(&keypath, home);
         filepath_append(&keypath, ".switch");

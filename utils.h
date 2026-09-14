@@ -15,10 +15,17 @@ struct filepath;
 
 #define MEDIA_SIZE 0x200
 
-/* On the switch, paths are limited to 0x300. Limit them to 0x400 - 1 on PC. */
-/* MAX_PATH is previously defined in "windef.h" on WIN32. */
+/* Fixed size for filepath_t on every translation unit.
+ * Never use the Windows SDK MAX_PATH (260) for this struct: keygen_firmware.c
+ * includes <windows.h> and would then get a different filepath_t layout than
+ * main.c / utils.c / filepath.c (MAX_PATH 1023), so .valid is read at the wrong
+ * offset and --keys / home default paths appear unset on Windows only. */
+#ifndef HACTOOL_MAX_PATH
+#define HACTOOL_MAX_PATH 1023
+#endif
+/* For Win32 API buffers (GetTempPathA, etc.) keep MAX_PATH if the SDK provided it. */
 #ifndef MAX_PATH
-#define MAX_PATH 1023
+#define MAX_PATH HACTOOL_MAX_PATH
 #endif
 
 #define FATAL_ERROR(msg) do {\

@@ -23,16 +23,18 @@
  *      derives master_kek -> master_key -> key_area_keys/titlekek/package2_key
  *      for that revision via the existing pki_derive_keys() pipeline.
  *   6. Compares that revision against the highest revision already present
- *      in the loaded keyset. If it isn't higher, nothing is written. If it
- *      is higher, the newly-derived keys are merged into the target keyfile.
+ *      in the loaded keyset (informational only). Always writes a complete
+ *      canonical dump of the current keyset, merging any pre-existing
+ *      custom/non-schema lines non-destructively into the target keyfile.
  *
  * tool_ctx  : already has settings.keyset populated from whatever keyfile
- *             was loaded at startup (same as every other hactool action).
+ *             was loaded at startup via -k/--keyset (input only).
  * input_dir : the folder of firmware NCAs (positional CLI argument).
- * cli_keypath : the raw -k/--keyset path as parsed in main(), or an
- *             uninitialized filepath_t if -k wasn't given. When invalid,
- *             the default $HOME/.switch/<prod|dev>.keys location is used
- *             (created if it does not exist yet).
+ * cli_keypath : the --keys OUTPUT path as parsed in main(), or an
+ *             uninitialized filepath_t if --keys was not given. This is
+ *             NOT -k/--keyset. When invalid, the default
+ *             $HOME/.switch/<prod|dev>.keys location is used (created if
+ *             it does not exist yet).
  *
  * Never writes any file other than the resolved output keyfile.
  */
