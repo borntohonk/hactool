@@ -98,13 +98,15 @@ static const swipc_entry_t swipc_table[] = {
     { 0x010000000000100BULL, "LibAppletShop",             SWIPC_TYPE_APPLET  },
     { 0x010000000000100CULL, "overlayDisp",               SWIPC_TYPE_APPLET  },
     { 0x010000000000100DULL, "photoViewer",               SWIPC_TYPE_APPLET  },
-    { 0x010000000000100FULL, "LibAppletOff",              SWIPC_TYPE_APPLET  },
+    { 0x010000000000100FULL, "offlineWeb",                SWIPC_TYPE_APPLET  },
     { 0x0100000000001010ULL, "LibAppletLns",              SWIPC_TYPE_APPLET  },
     { 0x0100000000001011ULL, "LibAppletAuth",             SWIPC_TYPE_APPLET  },
     { 0x0100000000001012ULL, "starter",                   SWIPC_TYPE_APPLET  },
     { 0x0100000000001013ULL, "myPage",                    SWIPC_TYPE_APPLET  },
     { 0x0100000000001015ULL, "maintenance",               SWIPC_TYPE_APPLET  },
     { 0x0100000000001048ULL, "splay",                     SWIPC_TYPE_APPLET  },
+    { 0x0100000000001042ULL, "systemWeb",                 SWIPC_TYPE_APPLET  },
+    { 0x0100000000001043ULL, "openWeb",                   SWIPC_TYPE_APPLET  },
 };
 
 static const size_t swipc_table_count = sizeof(swipc_table) / sizeof(swipc_table[0]);
@@ -259,6 +261,34 @@ static void swipc_extract_kernel_kips(nca_ctx_t *nca_ctx, const char *programs_d
     free(pkg2_data);
 }
 
+#define SWIPC_MAX_UNKNOWN 1024
+
+typedef struct {
+    uint64_t titleid;
+    uint8_t content_type;
+    char filename[0x100];
+    char title_name[0x51];
+} swipc_unknown_t;
+
+static swipc_unknown_t swipc_unknown[SWIPC_MAX_UNKNOWN];
+static size_t swipc_unknown_count = 0;
+
+static void swipc_record_unknown(uint64_t titleid, uint8_t content_type,
+                                 const char *filename, const char *title_name) {
+    if (content_type != NCACONTENTTYPE_PROGRAM) return;
+    for (size_t i = 0; i < swipc_unknown_count; i++) {
+        if (swipc_unknown[i].titleid == titleid) return;
+    }
+    if (swipc_unknown_count >= SWIPC_MAX_UNKNOWN) return;
+    swipc_unknown_t *u = &swipc_unknown[swipc_unknown_count++];
+    u->titleid = titleid;
+    u->content_type = content_type;
+    strncpy(u->filename, filename, sizeof(u->filename) - 1);
+    u->filename[sizeof(u->filename) - 1] = '\0';
+    strncpy(u->title_name, title_name ? title_name : "", sizeof(u->title_name) - 1);
+    u->title_name[sizeof(u->title_name) - 1] = '\0';
+}
+
 static void swipc_process_nca(swipc_ctx_t *ctx, const char *nca_filename, const char *input_path) {
     if (swipc_has_suffix(nca_filename, ".cnmt.nca")) return;
     if (!swipc_has_suffix(nca_filename, ".nca")) return;
@@ -299,6 +329,26 @@ static void swipc_process_nca(swipc_ctx_t *ctx, const char *nca_filename, const 
 
     const swipc_entry_t *entry = swipc_lookup(title_id);
     if (entry == NULL) {
+        if (content_type == NCACONTENTTYPE_PROGRAM) {
+            nca_ctx_t unk_ctx;
+            nca_init(&unk_ctx);
+            unk_ctx.file = f;
+            unk_ctx.file_size = fsize;
+            unk_ctx.tool_ctx = &silent_ctx;
+            nca_process(&unk_ctx);
+
+            const char *title_name = NULL;
+            for (int i = 0; i < 4; i++) {
+                nca_section_ctx_t *sec = &unk_ctx.section_contexts[i];
+                if (sec->is_present && sec->type == PFS0
+                    && sec->pfs0_ctx.is_exefs && sec->pfs0_ctx.npdm != NULL) {
+                    title_name = sec->pfs0_ctx.npdm->title_name;
+                    break;
+                }
+            }
+            swipc_record_unknown(title_id, content_type, nca_filename, title_name);
+            nca_free_section_contexts(&unk_ctx);
+        }
         fclose(f);
         return;
     }
@@ -409,4 +459,11 @@ void swipc_process(swipc_ctx_t *ctx) {
 
     swipc_enumerate_files(ctx, ctx->input_dir);
     printf("[swipc] Done.\n");
+        for (size_t i = 0; i < swipc_unknown_count; i++) {
+            printf("[swipc] 0x%016"PRIx64"  content_type=%u  %-24s %s\n",
+                   swipc_unknown[i].titleid,
+                   (unsigned)swipc_unknown[i].content_type,
+                   swipc_unknown[i].title_name[0] ? swipc_unknown[i].title_name : "(no npdm)",
+                   swipc_unknown[i].filename);
+        }
 }
